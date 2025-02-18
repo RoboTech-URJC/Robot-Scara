@@ -6,7 +6,7 @@ This version uses HowToMechatronics code,to simply:
 ### Step 1 : Run arduino program
 
 In [SCARA-ROBOT](https://github.com/RoboTech-URJC/Robot-Scara/tree/main/src/SCARA_Robot) you will find SCARA_ROBOT.ino
-,you must run it in **Arduino IDE** .
+,you must run it in **Arduino IDE** after installing AccelStepper library.
 
 ### Step 2 : Run user interface
 Verify if you have installed **Processing IDE**  [DOWNLOAD](https://processing.org).

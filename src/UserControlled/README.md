@@ -1,4 +1,4 @@
-# Basic Version:
+# User Controlled Version:
 This version uses HowToMechatronics code,to simply:
 * Open an user interface for controlling the SCARA,angles,positions...
 * Connects arduino serial port to the user interface program for it to receive orders.

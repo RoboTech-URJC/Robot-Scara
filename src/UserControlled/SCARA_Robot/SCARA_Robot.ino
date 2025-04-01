@@ -1,26 +1,20 @@
 /*
-   Arduino based SCARA Robot 
-   by Dejan, www.HowToMechatronics.com
+   Arduino based SCARA Robot - Modified version without limit switches
+   Original by Dejan, www.HowToMechatronics.com
    AccelStepper: http://www.airspayce.com/mikem/arduino/AccelStepper/index.html
-
+   Modified to work without limit switches
 */
 #include <AccelStepper.h>
 #include <Servo.h>
 #include <math.h>
 
-#define limitSwitch1 11
-#define limitSwitch2 10
-#define limitSwitch3 9
-#define limitSwitch4 A3
-
-// Define the stepper motors and the pins the will use
+// Define the stepper motors and the pins they will use
 AccelStepper stepper1(1, 2, 5); // (Type:driver, STEP, DIR)
 AccelStepper stepper2(1, 3, 6);
 AccelStepper stepper3(1, 4, 7);
 AccelStepper stepper4(1, 12, 13);
 
 Servo gripperServo;  // create servo object to control a servo
-
 
 double x = 10.0;
 double y = 10.0;
@@ -48,14 +42,16 @@ int zArray[100];
 int gripperArray[100];
 int positionsCounter = 0;
 
+// Valores predefinidos para la posición inicial (home)
+// Estos reemplazan la función de los limit switches
+const int homePosition1 = 0;     // Posición inicial para stepper1
+const int homePosition2 = 0;     // Posición inicial para stepper2
+const int homePosition3 = 0;     // Posición inicial para stepper3
+const int homePosition4 = 10000; // Posición inicial para stepper4
+
 void setup() {
   Serial.begin(115200);
-
-  pinMode(limitSwitch1, INPUT_PULLUP);
-  pinMode(limitSwitch2, INPUT_PULLUP);
-  pinMode(limitSwitch3, INPUT_PULLUP);
-  pinMode(limitSwitch4, INPUT_PULLUP);
-
+  
   // Stepper motors max speed
   stepper1.setMaxSpeed(4000);
   stepper1.setAcceleration(2000);
@@ -72,7 +68,9 @@ void setup() {
   gripperServo.write(data[6]);
   delay(1000);
   data[5] = 100;
-  homing();
+  
+  // Establecer posiciones iniciales manualmente en lugar de hacer homing
+  manualHoming();
 }
 
 void loop() {
@@ -174,38 +172,6 @@ void loop() {
         stepper4.setAcceleration(data[8]);
       }
     }
-    /*
-      // execute the stored steps in reverse
-      for (int i = positionsCounter - 2; i >= 0; i--) {
-      if (data[1] == 0) {
-        break;
-      }
-      stepper1.moveTo(theta1Array[i]);
-      stepper2.moveTo(theta2Array[i]);
-      stepper3.moveTo(phiArray[i]);
-      stepper4.moveTo(zArray[i]);
-      while (stepper1.currentPosition() != theta1Array[i] || stepper2.currentPosition() != theta2Array[i] || stepper3.currentPosition() != phiArray[i] || stepper4.currentPosition() != zArray[i]) {
-        stepper1.run();
-        stepper2.run();
-        stepper3.run();
-        stepper4.run();
-      }
-      gripperServo.write(gripperArray[i]);
-
-      if (Serial.available()) {
-        content = Serial.readString(); // Read the incomding data from Processing
-        // Extract the data from the string and put into separate integer variables (data[] array)
-        for (int i = 0; i < 10; i++) {
-          int index = content.indexOf(","); // locate the first ","
-          data[i] = atol(content.substring(0, index).c_str()); //Extract the number from start to the ","
-          content = content.substring(index + 1); //Remove the number from the string
-        }
-        if (data[1] == 0) {
-          break;
-        }
-      }
-      }
-    */
   }
 
   stepper1Position = data[2] * theta1AngleToSteps;
@@ -245,54 +211,38 @@ void serialFlush() {
   }
 }
 
-void homing() {
-  // Homing Stepper4
-  while (digitalRead(limitSwitch4) != 1) {
-    stepper4.setSpeed(1500);
-    stepper4.runSpeed();
-    stepper4.setCurrentPosition(17000); // When limit switch pressed set position to 0 steps
-  }
-  delay(20);
-  stepper4.moveTo(10000);
-  while (stepper4.currentPosition() != 10000) {
+// Nueva función de homing manual que reemplaza a la original
+void manualHoming() {
+  // En lugar de usar limit switches, establecemos posiciones predefinidas
+  
+  // Mover stepper4 a la posición inicial
+  stepper4.setCurrentPosition(0); // Establecer posición actual como 0
+  stepper4.moveTo(homePosition4);
+  while (stepper4.currentPosition() != homePosition4) {
     stepper4.run();
   }
 
-  // Homing Stepper3
-  while (digitalRead(limitSwitch3) != 1) {
-    stepper3.setSpeed(-1100);
-    stepper3.runSpeed();
-    stepper3.setCurrentPosition(-1662); // When limit switch pressed set position to 0 steps
-  }
-  delay(20);
-
-  stepper3.moveTo(0);
-  while (stepper3.currentPosition() != 0) {
+  // Mover stepper3 a la posición inicial
+  stepper3.setCurrentPosition(0);
+  stepper3.moveTo(homePosition3);
+  while (stepper3.currentPosition() != homePosition3) {
     stepper3.run();
   }
 
-  // Homing Stepper2
-  while (digitalRead(limitSwitch2) != 1) {
-    stepper2.setSpeed(-1300);
-    stepper2.runSpeed();
-    stepper2.setCurrentPosition(-5420); // When limit switch pressed set position to -5440 steps
-  }
-  delay(20);
-
-  stepper2.moveTo(0);
-  while (stepper2.currentPosition() != 0) {
+  // Mover stepper2 a la posición inicial
+  stepper2.setCurrentPosition(0);
+  stepper2.moveTo(homePosition2);
+  while (stepper2.currentPosition() != homePosition2) {
     stepper2.run();
   }
 
-  // Homing Stepper1
-  while (digitalRead(limitSwitch1) != 1) {
-    stepper1.setSpeed(-1200);
-    stepper1.runSpeed();
-    stepper1.setCurrentPosition(-3955); // When limit switch pressed set position to 0 steps
-  }
-  delay(20);
-  stepper1.moveTo(0);
-  while (stepper1.currentPosition() != 0) {
+  // Mover stepper1 a la posición inicial
+  stepper1.setCurrentPosition(0);
+  stepper1.moveTo(homePosition1);
+  while (stepper1.currentPosition() != homePosition1) {
     stepper1.run();
   }
+  
+  // Ahora el brazo está en su posición "home" predefinida
+  Serial.println("Manual homing completed");
 }

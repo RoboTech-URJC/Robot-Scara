@@ -10,7 +10,7 @@ import serial
 import time
 
 #poner el puerto correcto
-arduino = serial.Serial("/dev/ttyACM1",115200, timeout=1)
+arduino = serial.Serial("/dev/ttyACM0",115200, timeout=1)
 time.sleep(2)  # Espera a que Arduino se inicialice
 
 
@@ -62,7 +62,7 @@ def enviar_valores():
         print(f"Punto seleccionado: X={pos_x}, Y={pos_y}, Slider={valor_slider}")
 
         v_base, v_mano = calcular_valores(pos_x, pos_y)
-        print(f"Valores scara: Base={v_base}, Mano={v_base}, Z={valor_slider}")
+        print(f"Valores scara: Base={v_base}, Mano={v_mano}, Z={valor_slider}")
 
         comando = f"{v_base} {v_mano} {valor_slider}\n"
         arduino.write(comando.encode('utf-8'))

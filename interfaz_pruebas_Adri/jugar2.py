@@ -4,6 +4,8 @@ import time
 import cv2
 import numpy as np
 
+CAM = 2
+
 # ===== CONFIGURACIÓN SERIAL =====
 try:
     arduino = serial.Serial("/dev/ttyACM0", 115200, timeout=1)
@@ -201,7 +203,7 @@ def player_turn(player):
     global board, pieces
     print(f"\nTurno de {player}")
     
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(CAM)
     if not cap.isOpened():
         print("❌ No se pudo abrir la cámara")
         return None
@@ -236,7 +238,7 @@ def player_turn(player):
             cv2.destroyAllWindows()
             
             # Obtén el estado final del tablero y compáralo con el estado inicial
-            ret, frame = cv2.VideoCapture(0).read()
+            ret, frame = cv2.VideoCapture(CAM).read()
             if not ret:
                 print("❌ Error al capturar la imagen final.")
                 return

@@ -30,16 +30,16 @@ COORDS_ROBOT = {
 }
 
 # Configuración de detección de colores (HSV)
-# === AJUSTES CLAVE AQUÍ ===
 COLOR_RANGES = {
-    # ROJO (Piezas de la IA 'O') - Mantenemos un rango amplio para el tablero/fichas rojas
+    # ROJO (Piezas de la IA 'O' / Referencia del Tablero)
     'O': [
-        (np.array([0, 80, 50]), np.array([15, 255, 255])),  # Primer rango de rojo (más saturación/brillo)
-        (np.array([165, 80, 50]), np.array([180, 255, 255])) # Segundo rango de rojo
+        (np.array([0, 80, 50]), np.array([15, 255, 255])),
+        (np.array([165, 80, 50]), np.array([180, 255, 255]))
     ],
-    # AZUL (Piezas Humanas 'X') - Hacemos el rango más inclusivo para S y V
+    # AZUL (Piezas Humanas 'X') - Rangos más amplios para baja saturación/brillo
     'X': [
-        (np.array([90, 50, 50]), np.array([140, 255, 255])) # Aumentado el rango de Hue, bajado S y V mínimos
+        # Hue: 90-140 (Azul) | Saturation: 30-255 | Value: 30-255
+        (np.array([90, 30, 30]), np.array([140, 255, 255])) 
     ]
 }
 
@@ -50,7 +50,7 @@ class RobotController:
         self.arduino = None
         try:
             self.arduino = serial.Serial(port, baud_rate, timeout=1)
-            time.sleep(2)  # Espera a que Arduino se inicialice
+            time.sleep(2) 
             print("✅ Conexión con Arduino establecida.")
         except serial.SerialException as e:
             print(f"❌ Error al conectar con Arduino en {port}: {e}")
@@ -65,7 +65,7 @@ class RobotController:
             line = f"{coords[0]} {coords[1]} {coords[2]}"
             print(f"[SERIAL] Enviando: {line}")
             self.arduino.write((line + '\n').encode('utf-8'))
-            time.sleep(1) # Espera a que el Arduino procese el comando
+            time.sleep(1) 
         except serial.SerialException as e:
             print(f"❌ Error al enviar a Arduino: {e}")
 
@@ -116,10 +116,10 @@ def get_possible_moves(b, player, local_pieces):
     else:
         for i in range(3):
             for j in range(3):
-                if b[i][j] == player: # Ficha a mover
+                if b[i][j] == player: 
                     for x in range(3):
                         for y in range(3):
-                            if b[x][y] is None: # Destino vacío
+                            if b[x][y] is None: 
                                 moves.append(('move', i, j, x, y))
     return moves
 
@@ -149,9 +149,9 @@ def minimax(b, player, depth, maximizing, alpha, beta, local_pieces):
     winner = check_winner(b)
     if winner is not None:
         if winner == PLAYER_AI:
-            return 1 + depth # IA gana (Prefiere ganar antes)
+            return 1 + depth 
         elif winner == PLAYER_HUMAN:
-            return -1 - depth # Humano gana (Penaliza perder antes)
+            return -1 - depth 
         else:
             return 0
     
@@ -221,7 +221,7 @@ def get_best_move(b, player, pieces_counter):
 
 def find_board_and_pieces(frame):
     """
-    Detecta la región del tablero y las fichas azules ('X').
+    Detecta la región del tablero (usando 'O') y las fichas azules ('X').
     """
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     
@@ -238,8 +238,7 @@ def find_board_and_pieces(frame):
     c = max(contours_board, key=cv2.contourArea)
     area = cv2.contourArea(c)
     
-    if area < 500: # Ajustado: Bajar el área mínima para el tablero si es pequeño. Originalmente 1000
-         print(f"DEBUG: Área de contorno del tablero muy pequeña: {area}")
+    if area < 500: # Filtro de área mínima para el tablero
          return None, []
 
     x, y, w, h = cv2.boundingRect(c)
@@ -256,36 +255,31 @@ def find_board_and_pieces(frame):
     
     for cnt in contours_azul:
         area_piece = cv2.contourArea(cnt)
-        # === AJUSTE CLAVE AQUÍ ===
-        if 50 < area_piece < 5000: # Bajado el mínimo de 200 a 50 para piezas pequeñas, ajustado el máximo.
+        # Filtro de área más bajo (20-5000)
+        if 20 < area_piece < 5000: 
             M = cv2.moments(cnt)
             if M["m00"] != 0:
                 cx = int(M["m10"] / M["m00"])
                 cy = int(M["m01"] / M["m00"])
                 
+                # Mapear el centro de la pieza a una celda del tablero
                 if x <= cx <= x + w and y <= cy <= y + h:
                     i = (cy - y) // cell_h
                     j = (cx - x) // cell_w
                     
                     if 0 <= i < 3 and 0 <= j < 3:
                         blue_piece_coords.append((i, j))
-                else:
-                    print(f"DEBUG: Pieza azul detectada (area={area_piece}) fuera del ROI del tablero.")
-            else:
-                print("DEBUG: Momentos de contorno azul con m00=0.")
-        else:
-             print(f"DEBUG: Contorno azul (area={area_piece}) no pasó el filtro de área de pieza (50-5000).")
                         
     blue_piece_coords = sorted(list(set(blue_piece_coords))) # Eliminar duplicados
     
     return board_roi, blue_piece_coords
 
 
-# ===== FLUJO DE CONTROL Y TURNOS =====
+# ===== FLUJO DE CONTROL Y TURNOS (Lógica de colocación/movimiento mejorada) =====
 
 def player_turn(player, current_board, pieces_counter, robot_controller):
     """
-    Maneja el turno del jugador humano, con lógica robusta para diferenciar colocación vs. movimiento.
+    Maneja el turno del jugador humano.
     """
     print(f"\n--- Turno de {player} (Humano) ---")
     
@@ -326,21 +320,6 @@ def player_turn(player, current_board, pieces_counter, robot_controller):
                     cx = x + cell_w // 2 + j * cell_w
                     cy = y + cell_h // 2 + i * cell_h
                     cv2.circle(frame, (cx, cy), 15, (0, 255, 255), -1)
-            # else:
-            #     print("DEBUG: Tablero no detectado en el frame de vista previa.")
-
-
-            # --- OPCIONAL: Visualizar máscaras para depuración ---
-            # Si quieres ver qué colores detecta, descomenta estas líneas y presiona 'm' para alternar
-            # hsv_debug = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-            # mask_azul_debug = cv2.inRange(hsv_debug, *COLOR_RANGES['X'][0])
-            # mask_rojo_debug1 = cv2.inRange(hsv_debug, *COLOR_RANGES['O'][0])
-            # mask_rojo_debug2 = cv2.inRange(hsv_debug, *COLOR_RANGES['O'][1])
-            # mask_rojo_total = mask_rojo_debug1 | mask_rojo_debug2
-            # cv2.imshow("Mask Azul (X)", mask_azul_debug)
-            # cv2.imshow("Mask Rojo (O/Tablero)", mask_rojo_total)
-            # --- Fin de visualización de máscaras ---
-
 
             cv2.imshow("Coloca tu ficha", frame)
 
@@ -374,9 +353,9 @@ def player_turn(player, current_board, pieces_counter, robot_controller):
                         was_human = old_board[r][c] == PLAYER_HUMAN
                         
                         if not was_human and is_now_human:
-                            placed_at.append((r, c)) # Detectada una pieza en una casilla antes vacía
+                            placed_at.append((r, c)) 
                         elif was_human and not is_now_human:
-                            removed_from.append((r, c)) # Pieza removida de una casilla antes ocupada
+                            removed_from.append((r, c)) 
 
                 # Validar el movimiento
                 valid_move = False
@@ -406,15 +385,15 @@ def player_turn(player, current_board, pieces_counter, robot_controller):
                         print(f"❌ Error: En fase de MOVIMIENTO ({current_human_pieces} piezas), se esperaban 1 pieza nueva y 1 eliminada. Detectadas {len(placed_at)} nuevas y {len(removed_from)} eliminadas.")
                 
                 else:
-                    print(f"⚠️ Error Crítico: El contador de piezas es {current_human_pieces} (más de 3). Intentando validar como MOVIMIENTO.")
+                    print(f"⚠️ Error Crítico: Contador de piezas ({current_human_pieces}) es inconsistente. Intentando validar como MOVIMIENTO.")
                     if len(placed_at) == 1 and len(removed_from) == 1:
                         i_removed, j_removed = removed_from[0]
                         i_placed, j_placed = placed_at[0]
                         move_details = ('move', i_removed, j_removed, i_placed, j_placed)
                         valid_move = True
-                        print(f"✅ Detección forzada de Movimiento de ({i_removed},{j_removed}) a ({i_placed},{j_placed}).")
+                        print(f"✅ Detección forzada de Movimiento.")
                     else:
-                        print("❌ El estado es irrecuperable. Termina el juego o reinicia.")
+                        print("❌ El estado es irrecuperable.")
                         return False
 
                 # Aplicar o reintentar
@@ -445,17 +424,17 @@ def execute_pick_and_place(move, robot_controller):
         _, i, j = move
         dest = COORDS_ROBOT[(i, j)]
         print(f"[ROBOT] IA coloca ficha en {i},{j}")
-        robot_controller.send_coords(ORIGIN) # Ir a recoger
-        robot_controller.send_coords(dest)   # Colocar
-        robot_controller.send_coords(ORIGIN) # Volver a reposo
+        robot_controller.send_coords(ORIGIN) 
+        robot_controller.send_coords(dest)   
+        robot_controller.send_coords(ORIGIN) 
     elif move[0] == 'move':
         _, i, j, x, y = move
         start = COORDS_ROBOT[(i, j)]
         dest = COORDS_ROBOT[(x, y)]
         print(f"[ROBOT] IA mueve ficha de ({i},{j}) a ({x},{y})")
-        robot_controller.send_coords(start)  # Ir a recoger la pieza
-        robot_controller.send_coords(dest)   # Soltar la pieza
-        robot_controller.send_coords(ORIGIN) # Volver a reposo
+        robot_controller.send_coords(start)  
+        robot_controller.send_coords(dest)   
+        robot_controller.send_coords(ORIGIN) 
 
 def play_game():
     """Bucle principal del juego."""

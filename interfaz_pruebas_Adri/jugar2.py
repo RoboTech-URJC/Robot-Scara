@@ -209,14 +209,11 @@ def player_turn(player):
         return None
 
     old_board = copy.deepcopy(board)  # Save the board state before the move
-    print("Coloca o mueve tu ficha azul. La cámara detectará el cambio automáticamente.")
+    print("Coloca o mueve tu ficha azul. Presiona Enter cuando hayas terminado.")
 
-    # Variables for stability and timeout
+    # Variables for timeout
     start_time = time.time()
     timeout = 60  # Timeout after 60 seconds
-    stable_frames = 0
-    required_stable_frames = 5  # Number of consistent frames to confirm a move
-    last_detected_pieces = None
 
     while True:
         ret, frame = cap.read()
@@ -239,18 +236,23 @@ def player_turn(player):
 
         cv2.imshow("Coloca tu ficha azul", frame)
 
-        # Check for stable board state
-        if last_detected_pieces is not None and detected_pieces == last_detected_pieces:
-            stable_frames += 1
-        else:
-            stable_frames = 0
-            last_detected_pieces = detected_pieces
+        # Check for Enter or quit key
+        key = cv2.waitKey(10)  # 10ms delay for reliable key detection
+        if key == 13:  # Enter key
+            # Capture final frame
+            ret, frame = cap.read()
+            if not ret:
+                print("❌ Error al capturar la imagen final")
+                cap.release()
+                cv2.destroyAllWindows()
+                return None
 
-        # Process move if stable for enough frames
-        if stable_frames >= required_stable_frames:
+            # Detect final board state
+            _, final_detected_pieces = find_pieces_on_board(frame)
+
             # Create new board state from detected pieces
             new_board = [[None, None, None] for _ in range(3)]
-            for (i, j) in detected_pieces:
+            for (i, j) in final_detected_pieces:
                 if 0 <= i < 3 and 0 <= j < 3:
                     new_board[i][j] = 'X'
 
@@ -264,6 +266,13 @@ def player_turn(player):
                     elif old_board[r][c] == 'X' and new_board[r][c] is None:
                         removed_from.append((r, c))
 
+            # Check if board state is unchanged
+            if not placed_at and not removed_from:
+                print("❌ No se detectó ningún cambio en el tablero. Turno saltado.")
+                cap.release()
+                cv2.destroyAllWindows()
+                return
+
             # Validate move
             if pieces['X'] < 3:  # Placing a new piece
                 if len(placed_at) == 1 and not removed_from:
@@ -276,9 +285,9 @@ def player_turn(player):
                         cv2.destroyAllWindows()
                         return
                     else:
-                        print(f"❌ La casilla ({i},{j}) ya está ocupada. Inténtalo de nuevo.")
+                        print(f"❌ La casilla ({i},{j}) ya está ocupada. Turno saltado.")
                 else:
-                    print(f"❌ Detección inválida: {len(placed_at)} fichas nuevas, {len(removed_from)} eliminadas. Inténtalo de nuevo.")
+                    print(f"❌ Detección inválida: {len(placed_at)} fichas nuevas, {len(removed_from)} eliminadas. Turno saltado.")
             else:  # Moving an existing piece
                 if len(placed_at) == 1 and len(removed_from) == 1:
                     i_removed, j_removed = removed_from[0]
@@ -291,13 +300,15 @@ def player_turn(player):
                         cv2.destroyAllWindows()
                         return
                     else:
-                        print(f"❌ La casilla destino ({i_placed},{j_placed}) ya está ocupada. Inténtalo de nuevo.")
+                        print(f"❌ La casilla destino ({i_placed},{j_placed}) ya está ocupada. Turno saltado.")
                 else:
-                    print(f"❌ Detección inválida: {len(placed_at)} fichas nuevas, {len(removed_from)} eliminadas. Inténtalo de nuevo.")
+                    print(f"❌ Detección inválida: {len(placed_at)} fichas nuevas, {len(removed_from)} eliminadas. Turno saltado.")
 
-        # Check for quit key
-        key = cv2.waitKey(10)
-        if key == ord('q'):  # Quit
+            cap.release()
+            cv2.destroyAllWindows()
+            return  # Skip turn on invalid move
+
+        elif key == ord('q'):  # Quit
             cap.release()
             cv2.destroyAllWindows()
             print("❌ Juego terminado por el usuario")
@@ -307,7 +318,7 @@ def player_turn(player):
         if time.time() - start_time > timeout:
             cap.release()
             cv2.destroyAllWindows()
-            print("❌ Tiempo de espera agotado. Inténtalo de nuevo.")
+            print("❌ Tiempo de espera agotado. Turno saltado.")
             return None
 
     cap.release()

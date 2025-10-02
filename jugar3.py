@@ -3,6 +3,7 @@ import serial
 import time
 import cv2
 import numpy as np
+import sys # Para usar sys.exit() en lugar de exit()
 
 # ===== CONFIGURACIÓN GLOBAL =====
 CAM_ID = 2  # ID de la cámara
@@ -11,7 +12,6 @@ PLAYER_AI = 'O'
 MAX_DEPTH = 6  # Profundidad para el algoritmo Minimax (ajustable)
 
 # ===== CONFIGURACIÓN SERIAL Y ROBÓTICA (XYZ) =====
-# Nota: La configuración física sigue siendo la misma.
 SERIAL_PORT = "/dev/ttyACM0"
 BAUD_RATE = 115200
 ORIGIN = (25, 0, 0)  # Posición inicial o de reposo del brazo
@@ -30,9 +30,8 @@ COORDS_ROBOT = {
 }
 
 # Configuración de detección de colores (HSV)
-# Se han ajustado los valores para una detección más precisa y robusta
 COLOR_RANGES = {
-    # ROJO (Piezas de la IA 'O') - Utilizando dos rangos para capturar el rojo completo
+    # ROJO (Piezas de la IA 'O' - Usado como referencia para el tablero también)
     'O': [
         (np.array([0, 100, 50]), np.array([10, 255, 255])),
         (np.array([170, 100, 50]), np.array([180, 255, 255]))
@@ -65,11 +64,7 @@ class RobotController:
             line = f"{coords[0]} {coords[1]} {coords[2]}"
             print(f"[SERIAL] Enviando: {line}")
             self.arduino.write((line + '\n').encode('utf-8'))
-            
-            # **MEJORA:** Espera confirmación o un tiempo más corto.
-            # Aquí se asume que el Arduino procesa en menos de 1 segundo.
-            # En un sistema real, se debería esperar una respuesta de 'OK' del Arduino.
-            time.sleep(1) 
+            time.sleep(1) # Espera a que el Arduino procese el comando
         except serial.SerialException as e:
             print(f"❌ Error al enviar a Arduino: {e}")
 
@@ -117,7 +112,6 @@ def get_possible_moves(b, player, local_pieces):
         for i in range(3):
             for j in range(3):
                 if b[i][j] is None:
-                    # Formato: ('place', fila, columna)
                     moves.append(('place', i, j))
     
     # 2. Fase de MOVIMIENTO (después de 3 piezas)
@@ -128,7 +122,6 @@ def get_possible_moves(b, player, local_pieces):
                     for x in range(3):
                         for y in range(3):
                             if b[x][y] is None: # Destino vacío
-                                # Formato: ('move', from_row, from_col, to_row, to_col)
                                 moves.append(('move', i, j, x, y))
     return moves
 
@@ -149,21 +142,20 @@ def apply_move(b, move, player, update_pieces=True, local_pieces=None):
             b[i][j] = None
             b[x][y] = player
     
-    # El retorno del tablero (modificado in-place) no es estrictamente necesario, pero es un buen patrón.
     return b
 
-# ===== IA (MINIMAX CON ALPHA-BETA PRUNING) - Optimizado y mejor manejado =====
+# ===== IA (MINIMAX CON ALPHA-BETA PRUNING) =====
 
 def minimax(b, player, depth, maximizing, alpha, beta, local_pieces):
     """Implementación de Minimax con poda Alpha-Beta."""
     
     winner = check_winner(b)
     if winner is not None:
-        if winner == PLAYER_AI: # IA gana
-            return 1 + depth # Prefiere ganar antes y más rápido
-        elif winner == PLAYER_HUMAN: # Humano gana
-            return -1 - depth # Penaliza perder antes y más rápido
-        else: # Empate o fin de profundidad
+        if winner == PLAYER_AI:
+            return 1 + depth # Prefiere ganar antes
+        elif winner == PLAYER_HUMAN:
+            return -1 - depth # Penaliza perder antes
+        else:
             return 0
     
     if depth == 0:
@@ -178,7 +170,6 @@ def minimax(b, player, depth, maximizing, alpha, beta, local_pieces):
             new_pieces = copy.deepcopy(local_pieces)
             apply_move(new_board, move, current_player, update_pieces=True, local_pieces=new_pieces)
             
-            # El siguiente jugador es el que minimiza
             eval_val = minimax(new_board, PLAYER_HUMAN, depth - 1, False, alpha, beta, new_pieces)
             max_eval = max(max_eval, eval_val)
             alpha = max(alpha, eval_val)
@@ -193,10 +184,9 @@ def minimax(b, player, depth, maximizing, alpha, beta, local_pieces):
             new_pieces = copy.deepcopy(local_pieces)
             apply_move(new_board, move, current_player, update_pieces=True, local_pieces=new_pieces)
             
-            # El siguiente jugador es el que maximiza
             eval_val = minimax(new_board, PLAYER_AI, depth - 1, True, alpha, beta, new_pieces)
             min_eval = min(min_eval, eval_val)
-            beta = min(beta, eval_val) # Corregido: 'beta = min(beta, eval_val)'
+            beta = min(beta, eval_val)
             if beta <= alpha:
                 break
         return min_eval
@@ -211,11 +201,7 @@ def get_best_move(b, player, pieces_counter):
     best_val = -float('inf') if is_maximizing else float('inf')
     best_m = moves[0]
 
-    # El siguiente jugador es el opuesto
     next_player = PLAYER_HUMAN if player == PLAYER_AI else PLAYER_AI
-    
-    # La llamada inicial al minimax debe ser para el *siguiente* estado, 
-    # por lo que el parámetro 'maximizing' debe ser para el siguiente jugador.
     next_maximizing = not is_maximizing
 
     print(f"Calculando mejor movimiento para {player}...")
@@ -225,24 +211,21 @@ def get_best_move(b, player, pieces_counter):
         new_pieces = copy.deepcopy(pieces_counter)
         apply_move(new_board, move, player, update_pieces=True, local_pieces=new_pieces)
         
-        # Evalúa el estado resultante. Si el jugador actual es la IA (maximizador), 
-        # la siguiente llamada será para el humano (minimizador).
         val = minimax(new_board, next_player, MAX_DEPTH, next_maximizing, -float('inf'), float('inf'), new_pieces)
         
-        # Actualiza el mejor movimiento
         if (is_maximizing and val > best_val) or (not is_maximizing and val < best_val):
             best_val = val
             best_m = move
-            print(f"  Nuevo mejor movimiento: {best_m} con valor: {best_val}")
+            # Opcional: print(f"  Nuevo mejor movimiento: {best_m} con valor: {best_val}")
 
     print(f"Mejor valor final: {best_val}")
     return best_m
 
-# ===== VISIÓN POR COMPUTADORA (CV) - Mejorado para robustez =====
+# ===== VISIÓN POR COMPUTADORA (CV) =====
 
 def find_board_and_pieces(frame):
     """
-    Detecta la región del tablero (la pieza roja más grande) y las fichas azules ('X').
+    Detecta la región del tablero y las fichas azules ('X').
     
     Retorna:
     - board_roi (tuple): (x, y, w, h) del tablero, o None.
@@ -250,39 +233,36 @@ def find_board_and_pieces(frame):
     """
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     
-    # 1. Detección del Tablero (usando el color 'O' de la IA como referencia del límite)
-    board_mask = cv2.inRange(hsv, *COLOR_RANGES['O'][0]) | cv2.inRange(hsv, *COLOR_RANGES['O'][1])
+    # 1. Detección del Tablero (usando color 'O' como referencia)
+    r1 = cv2.inRange(hsv, *COLOR_RANGES['O'][0])
+    r2 = cv2.inRange(hsv, *COLOR_RANGES['O'][1])
+    board_mask = r1 | r2
     
     contours_board, _ = cv2.findContours(board_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     if not contours_board:
         return None, []
         
-    # Encuentra el contorno más grande (asumiendo que es el tablero)
     c = max(contours_board, key=cv2.contourArea)
     area = cv2.contourArea(c)
     
-    # Filtro de área mínima para evitar ruido
-    if area < 1000: 
+    if area < 1000: # Filtro de área mínima
          return None, []
 
     x, y, w, h = cv2.boundingRect(c)
     board_roi = (x, y, w, h)
     
     # 2. Detección de Piezas Azules (Humanas 'X')
-    # Uso de la función mejorada de find_contours para las piezas
     mask_azul = cv2.inRange(hsv, *COLOR_RANGES['X'][0])
     contours_azul, _ = cv2.findContours(mask_azul, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     blue_piece_coords = []
     
-    # Calcular dimensiones de celda *dentro* del ROI del tablero
     cell_w = w // 3
     cell_h = h // 3
     
     for cnt in contours_azul:
         area_piece = cv2.contourArea(cnt)
-        # Filtro de área específico para piezas
         if 200 < area_piece < 10000: 
             M = cv2.moments(cnt)
             if M["m00"] != 0:
@@ -294,51 +274,25 @@ def find_board_and_pieces(frame):
                     i = (cy - y) // cell_h
                     j = (cx - x) // cell_w
                     
-                    # Validación de límites de celda
                     if 0 <= i < 3 and 0 <= j < 3:
                         blue_piece_coords.append((i, j))
                         
-    # Eliminar duplicados si hay (por ejemplo, por detección muy cercana)
+    # Eliminar duplicados
     blue_piece_coords = sorted(list(set(blue_piece_coords)))
     
     return board_roi, blue_piece_coords
 
-def get_board_state_from_vision(pieces_of_interest):
-    """
-    Captura una imagen y devuelve el estado del tablero basado en las piezas detectadas.
-    
-    Retorna:
-    - new_board (list of lists): Tablero 3x3 con 'X' o None.
-    - cap (cv2.VideoCapture): Objeto de la cámara abierto (para cerrar después).
-    """
-    cap = cv2.VideoCapture(CAM_ID)
-    if not cap.isOpened():
-        print("❌ No se pudo abrir la cámara")
-        return None, None
-        
-    ret, frame = cap.read()
-    if not ret:
-        print("❌ Error al capturar imagen")
-        cap.release()
-        return None, None
 
-    board_roi, detected_coords = find_board_and_pieces(frame)
-    
-    new_board = [[None, None, None] for _ in range(3)]
-    for (i, j) in detected_coords:
-        # Aquí solo se detectan las piezas humanas ('X')
-        new_board[i][j] = pieces_of_interest 
-        
-    return new_board, cap
-
-
-# ===== JUEGO Y FLUJO DE CONTROL PRINCIPAL =====
+# ===== FLUJO DE CONTROL Y TURNOS =====
 
 def player_turn(player, current_board, pieces_counter, robot_controller):
-    """Maneja el turno del jugador humano (incluye CV para validar el movimiento)."""
+    """
+    Maneja el turno del jugador humano.
+    CORRECCIÓN CLAVE: Usa el último frame estable para el análisis
+    después de presionar ENTER, evitando reabrir la cámara y fallar la detección.
+    """
     print(f"\n--- Turno de {player} (Humano) ---")
     
-    # 1. Copia del estado inicial del tablero
     old_board = copy.deepcopy(current_board) 
     
     print_board(old_board)
@@ -347,7 +301,9 @@ def player_turn(player, current_board, pieces_counter, robot_controller):
     cap = cv2.VideoCapture(CAM_ID)
     if not cap.isOpened():
         print("❌ No se pudo abrir la cámara para la vista previa.")
-        return False # Fallo en el turno
+        return False
+
+    last_stable_frame = None 
 
     try:
         while True:
@@ -355,67 +311,77 @@ def player_turn(player, current_board, pieces_counter, robot_controller):
             if not ret:
                 print("❌ Error al capturar imagen en bucle de vista previa.")
                 break
+            
+            last_stable_frame = frame
 
             board_roi, detected_pieces = find_board_and_pieces(frame)
             
-            # **MEJORA:** Dibujar la cuadrícula para la vista previa
+            # Dibujar Feedback
             if board_roi:
                 x, y, w, h = board_roi
                 cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
                 cell_w, cell_h = w // 3, h // 3
                 
-                for i in range(1, 3): # Dibujar líneas de la cuadrícula
+                for i in range(1, 3): 
                     cv2.line(frame, (x + i * cell_w, y), (x + i * cell_w, y + h), (0, 255, 0), 1)
                     cv2.line(frame, (x, y + i * cell_h), (x + w, y + i * cell_h), (0, 255, 0), 1)
                 
-                # Dibujar círculos en el centro de las piezas detectadas
                 for i, j in detected_pieces:
                     cx = x + cell_w // 2 + j * cell_w
                     cy = y + cell_h // 2 + i * cell_h
-                    cv2.circle(frame, (cx, cy), 15, (0, 255, 255), -1) # Amarillo para detectado
+                    cv2.circle(frame, (cx, cy), 15, (0, 255, 255), -1)
 
             cv2.imshow("Coloca tu ficha", frame)
 
             key = cv2.waitKey(1)
+            
             if key == 13:  # Enter
-                print("Detectando movimiento...")
-                # Repetir la captura final para asegurar la imagen estática
+                print("Detectando movimiento en el último frame estable...")
+                
+                if last_stable_frame is None:
+                    print("❌ Error: No se ha capturado ninguna imagen estable para el análisis. Intenta de nuevo.")
+                    continue
+                
+                # Cerrar ANTES del análisis para evitar interferencia
                 cap.release()
                 cv2.destroyAllWindows()
                 
-                # 2. Captura del estado final
-                final_board_state, _ = get_board_state_from_vision(PLAYER_HUMAN)
-                if final_board_state is None:
-                    print("❌ Fallo en la captura final. Intenta de nuevo.")
-                    continue
+                # Análisis usando el frame almacenado
+                _, final_detected_pieces = find_board_and_pieces(last_stable_frame)
                 
-                # 3. Determinar el movimiento humano comparando estados (solo 'X')
+                new_board = [[None, None, None] for _ in range(3)]
+                for (i, j) in final_detected_pieces:
+                    if 0 <= i < 3 and 0 <= j < 3:
+                        new_board[i][j] = PLAYER_HUMAN
+                
+                # Comparar estados
                 placed_at = []
                 removed_from = []
                 
                 for r in range(3):
                     for c in range(3):
-                        is_now_human = final_board_state[r][c] == PLAYER_HUMAN
+                        is_now_human = new_board[r][c] == PLAYER_HUMAN
                         was_human = old_board[r][c] == PLAYER_HUMAN
                         
                         if not was_human and is_now_human:
-                            placed_at.append((r, c)) # Nueva ficha en casilla vacía
+                            placed_at.append((r, c))
                         elif was_human and not is_now_human:
-                            removed_from.append((r, c)) # Ficha que desapareció de su posición
+                            removed_from.append((r, c))
 
-                # 4. Validar el movimiento
+                # Validar el movimiento
                 valid_move = False
+                move_details = None
                 
-                if pieces_counter[PLAYER_HUMAN] < 3: # Fase de COLOCACIÓN
+                if pieces_counter[PLAYER_HUMAN] < 3: # Colocación
                     if len(placed_at) == 1 and not removed_from:
                         i, j = placed_at[0]
                         move_details = ('place', i, j)
                         valid_move = True
                         print(f"✅ Detección: Colocación en ({i},{j}).")
                     else:
-                        print(f"❌ Error: Se esperaban 1 pieza nueva (colocación). Detectadas {len(placed_at)} nuevas y {len(removed_from)} eliminadas.")
+                        print(f"❌ Error: Se esperaban 1 pieza nueva (colocación).")
                         
-                else: # Fase de MOVIMIENTO
+                else: # Movimiento
                     if len(placed_at) == 1 and len(removed_from) == 1:
                         i_removed, j_removed = removed_from[0]
                         i_placed, j_placed = placed_at[0]
@@ -423,19 +389,23 @@ def player_turn(player, current_board, pieces_counter, robot_controller):
                         valid_move = True
                         print(f"✅ Detección: Movimiento de ({i_removed},{j_removed}) a ({i_placed},{j_placed}).")
                     else:
-                        print(f"❌ Error: Se esperaba 1 pieza movida. Detectadas {len(placed_at)} nuevas y {len(removed_from)} eliminadas.")
+                        print(f"❌ Error: Se esperaba 1 pieza movida.")
                 
-                # 5. Aplicar el movimiento si es válido (y romper el bucle)
+                # Aplicar o reintentar
                 if valid_move:
                     apply_move(current_board, move_details, PLAYER_HUMAN, update_pieces=True, local_pieces=pieces_counter)
-                    return True # Turno exitoso
+                    return True
                 else:
                     print("Por favor, corrige el movimiento en el tablero y presiona ENTER de nuevo.")
-                    cap = cv2.VideoCapture(CAM_ID) # Reabrir la cámara
+                    # Reabrir la cámara para reanudar la vista previa
+                    cap = cv2.VideoCapture(CAM_ID) 
+                    if not cap.isOpened():
+                        print("❌ Error al reabrir la cámara.")
+                        return False
                     continue
                     
             elif key == ord('q'):
-                exit()
+                sys.exit()
                 
     finally:
         if cap.isOpened():
@@ -464,56 +434,54 @@ def execute_pick_and_place(move, robot_controller):
 
 def play_game():
     """Bucle principal del juego."""
-    # Inicialización Global
-    global board, pieces # Accede a las variables globales
+    global board, pieces 
     
-    # Inicialización de la IA y el Robot
     robot = RobotController(SERIAL_PORT, BAUD_RATE)
     current_player = PLAYER_HUMAN
     
     print("--- INICIO DEL JUEGO: Tres en Raya Robótico ---")
     
-    while True:
-        print_board(board)
-        winner = check_winner(board)
-        
-        if winner:
-            print(f"==========================================")
-            print(f"¡{'EMPATE' if winner == 'draw' else '¡' + winner + ' ha GANADO'}!")
-            print(f"==========================================")
-            break
-
-        if current_player == PLAYER_HUMAN:
-            # Pasa el objeto del robot por si se necesita en el futuro (ej. para calibración)
-            turn_success = player_turn(current_player, board, pieces, robot)
-            if not turn_success:
-                print("❌ Error crítico durante el turno del jugador. Terminando juego.")
-                break
-        
-        else: # Turno de la IA
-            print(f"\n--- Turno de {current_player} (IA) ---")
-            # El jugador IA tiene piezas en el tablero o disponibles?
-            move = get_best_move(board, current_player, pieces)
+    try:
+        while True:
+            print_board(board)
+            winner = check_winner(board)
             
-            if move:
-                print(f"IA ({current_player}) eligió el movimiento: {move}")
-                execute_pick_and_place(move, robot)
-                apply_move(board, move, current_player, update_pieces=True)
-            else:
-                print("No hay movimientos válidos para la IA. Terminando juego (posiblemente error de lógica).")
+            if winner:
+                print(f"==========================================")
+                print(f"¡{'EMPATE' if winner == 'draw' else '¡' + winner + ' ha GANADO'}!")
+                print(f"==========================================")
                 break
 
-        # Cambiar de turno
-        current_player = PLAYER_HUMAN if current_player == PLAYER_AI else PLAYER_AI
+            if current_player == PLAYER_HUMAN:
+                turn_success = player_turn(current_player, board, pieces, robot)
+                if not turn_success:
+                    print("❌ Error crítico durante el turno del jugador. Terminando juego.")
+                    break
+            
+            else: # Turno de la IA
+                print(f"\n--- Turno de {current_player} (IA) ---")
+                move = get_best_move(board, current_player, pieces)
+                
+                if move:
+                    print(f"IA ({current_player}) eligió el movimiento: {move}")
+                    execute_pick_and_place(move, robot)
+                    apply_move(board, move, current_player, update_pieces=True)
+                else:
+                    print("No hay movimientos válidos para la IA. Terminando juego.")
+                    break
 
-    robot.close()
+            current_player = PLAYER_HUMAN if current_player == PLAYER_AI else PLAYER_AI
+            
+    finally:
+        robot.close()
+
 
 if __name__ == "__main__":
-    # Inicialización del tablero y contadores
+    # Inicialización del tablero y contadores globales
     board = [[None, None, None] for _ in range(3)]
     pieces = {PLAYER_HUMAN: 0, PLAYER_AI: 0}
     
     try:
         play_game()
     finally:
-        cv2.destroyAllWindows() # Asegura que todas las ventanas de CV se cierren
+        cv2.destroyAllWindows()

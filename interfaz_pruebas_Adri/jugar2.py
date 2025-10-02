@@ -198,9 +198,18 @@ def find_pieces_on_board(frame):
     
     return board_roi, blue_piece_coords
 
+# ===== FUNCIÓN PARA MANEJAR CLICS DEL MOUSE =====
+def mouse_callback(event, x, y, flags, param):
+    global confirm_clicked
+    if event == cv2.EVENT_LBUTTONDOWN:
+        # Check if click is within the button area
+        button_x, button_y, button_w, button_h = param
+        if button_x <= x <= button_x + button_w and button_y <= y <= button_y + button_h:
+            confirm_clicked = True
+
 # ===== JUEGO =====
 def player_turn(player):
-    global board, pieces
+    global board, pieces, confirm_clicked
     print(f"\nTurno de {player}")
     
     cap = cv2.VideoCapture(CAM)
@@ -209,11 +218,21 @@ def player_turn(player):
         return None
 
     old_board = copy.deepcopy(board)  # Save the board state before the move
-    print("Coloca o mueve tu ficha azul. Presiona Enter cuando hayas terminado.")
+    print("Coloca o mueve tu ficha azul. Presiona Enter o haz clic en 'Confirmar' cuando hayas terminado.")
 
-    # Variables for timeout
+    # Variables for timeout and button
     start_time = time.time()
     timeout = 60  # Timeout after 60 seconds
+    confirm_clicked = False  # Flag for button click
+    window_name = "Coloca tu ficha azul"
+    cv2.namedWindow(window_name)
+
+    # Button properties
+    button_x = 10
+    button_y = 10
+    button_w = 100
+    button_h = 40
+    cv2.setMouseCallback(window_name, mouse_callback, (button_x, button_y, button_w, button_h))
 
     while True:
         ret, frame = cap.read()
@@ -234,11 +253,17 @@ def player_turn(player):
                 cy = y + cell_h // 2 + i * cell_h
                 cv2.circle(frame, (cx, cy), 15, (255, 255, 0), -1)
 
-        cv2.imshow("Coloca tu ficha azul", frame)
+        # Draw the Confirm button
+        cv2.rectangle(frame, (button_x, button_y), (button_x + button_w, button_y + button_h), (0, 255, 0), -1)
+        cv2.putText(frame, "Confirmar", (button_x + 10, button_y + 30), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
 
-        # Check for Enter or quit key
+        cv2.imshow(window_name, frame)
+
+        # Check for Enter key or button click
         key = cv2.waitKey(10)  # 10ms delay for reliable key detection
-        if key == 13:  # Enter key
+        if key == 13 or confirm_clicked:  # Enter key or button clicked
+            confirm_clicked = False  # Reset button flag
             # Capture final frame
             ret, frame = cap.read()
             if not ret:

@@ -209,11 +209,14 @@ def player_turn(player):
         return None
 
     old_board = copy.deepcopy(board)  # Save the board state before the move
-    print("Coloca tu ficha azul. La cámara está en vivo. Presiona Enter cuando hayas terminado.")
+    print("Coloca o mueve tu ficha azul. La cámara detectará el cambio automáticamente.")
 
-    # Variables for keypress timeout
+    # Variables for stability and timeout
     start_time = time.time()
     timeout = 60  # Timeout after 60 seconds
+    stable_frames = 0
+    required_stable_frames = 5  # Number of consistent frames to confirm a move
+    last_detected_pieces = None
 
     while True:
         ret, frame = cap.read()
@@ -236,32 +239,18 @@ def player_turn(player):
 
         cv2.imshow("Coloca tu ficha azul", frame)
 
-        # Increase waitKey delay to improve key detection reliability
-        key = cv2.waitKey(10)  # Increased from 1ms to 10ms
-        if key == 13:  # Enter key
-            # Release camera temporarily to ensure final frame capture
-            cap.release()
-            cv2.destroyAllWindows()
+        # Check for stable board state
+        if last_detected_pieces is not None and detected_pieces == last_detected_pieces:
+            stable_frames += 1
+        else:
+            stable_frames = 0
+            last_detected_pieces = detected_pieces
 
-            # Reopen camera for final capture
-            cap = cv2.VideoCapture(CAM)
-            if not cap.isOpened():
-                print("❌ No se pudo reabrir la cámara")
-                return None
-
-            # Capture final frame
-            ret, frame = cap.read()
-            cap.release()
-            if not ret:
-                print("❌ Error al capturar la imagen final")
-                return None
-
-            # Detect final board state
-            _, final_detected_pieces = find_pieces_on_board(frame)
-
+        # Process move if stable for enough frames
+        if stable_frames >= required_stable_frames:
             # Create new board state from detected pieces
             new_board = [[None, None, None] for _ in range(3)]
-            for (i, j) in final_detected_pieces:
+            for (i, j) in detected_pieces:
                 if 0 <= i < 3 and 0 <= j < 3:
                     new_board[i][j] = 'X'
 
@@ -283,6 +272,8 @@ def player_turn(player):
                         board[i][j] = 'X'
                         pieces['X'] += 1
                         print(f"✅ Ficha colocada en ({i},{j}). Total de fichas: {pieces['X']}")
+                        cap.release()
+                        cv2.destroyAllWindows()
                         return
                     else:
                         print(f"❌ La casilla ({i},{j}) ya está ocupada. Inténtalo de nuevo.")
@@ -296,20 +287,17 @@ def player_turn(player):
                         board[i_removed][j_removed] = None
                         board[i_placed][j_placed] = 'X'
                         print(f"✅ Ficha movida de ({i_removed},{j_removed}) a ({i_placed},{j_placed}).")
+                        cap.release()
+                        cv2.destroyAllWindows()
                         return
                     else:
                         print(f"❌ La casilla destino ({i_placed},{j_placed}) ya está ocupada. Inténtalo de nuevo.")
                 else:
                     print(f"❌ Detección inválida: {len(placed_at)} fichas nuevas, {len(removed_from)} eliminadas. Inténtalo de nuevo.")
 
-            # Reopen camera for next attempt
-            cap = cv2.VideoCapture(CAM)
-            if not cap.isOpened():
-                print("❌ No se pudo reabrir la cámara")
-                return None
-            print("Por favor, inténtalo de nuevo.")
-
-        elif key == ord('q'):  # Quit
+        # Check for quit key
+        key = cv2.waitKey(10)
+        if key == ord('q'):  # Quit
             cap.release()
             cv2.destroyAllWindows()
             print("❌ Juego terminado por el usuario")

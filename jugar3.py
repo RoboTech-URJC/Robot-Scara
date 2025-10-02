@@ -3,12 +3,12 @@ import serial
 import time
 import cv2
 import numpy as np
-import sys # Para usar sys.exit() en lugar de exit()
+import sys
 
 # ===== CONFIGURACIÓN GLOBAL =====
 CAM_ID = 2  # ID de la cámara
-PLAYER_HUMAN = 'X'
-PLAYER_AI = 'O'
+PLAYER_HUMAN = 'X' # Humano (Fichas azules)
+PLAYER_AI = 'O'    # IA (Fichas rojas)
 MAX_DEPTH = 6  # Profundidad para el algoritmo Minimax (ajustable)
 
 # ===== CONFIGURACIÓN SERIAL Y ROBÓTICA (XYZ) =====
@@ -31,7 +31,7 @@ COORDS_ROBOT = {
 
 # Configuración de detección de colores (HSV)
 COLOR_RANGES = {
-    # ROJO (Piezas de la IA 'O' - Usado como referencia para el tablero también)
+    # ROJO (Piezas de la IA 'O')
     'O': [
         (np.array([0, 100, 50]), np.array([10, 255, 255])),
         (np.array([170, 100, 50]), np.array([180, 255, 255]))
@@ -42,7 +42,7 @@ COLOR_RANGES = {
     ]
 }
 
-# ===== CLASE ROBOT (Para encapsular la lógica de comunicación serial) =====
+# ===== CLASE ROBOT =====
 class RobotController:
     """Maneja la conexión y comunicación con el brazo robótico (Arduino)."""
     def __init__(self, port, baud_rate):
@@ -74,7 +74,7 @@ class RobotController:
             self.arduino.close()
             print("✅ Conexión con Arduino cerrada.")
 
-# ===== LÓGICA DEL JUEGO (GAME LOGIC) =====
+# ===== LÓGICA DEL JUEGO =====
 
 def print_board(b):
     """Imprime el tablero de forma más clara."""
@@ -87,9 +87,7 @@ def print_board(b):
 
 def check_winner(b):
     """Verifica si hay un ganador o un empate."""
-    # Filas, Columnas
     lines = b + list(map(list, zip(*b)))
-    # Diagonales
     lines.append([b[i][i] for i in range(3)])
     lines.append([b[i][2-i] for i in range(3)])
     
@@ -97,7 +95,6 @@ def check_winner(b):
         if line[0] and all(c == line[0] for c in line):
             return line[0]
     
-    # Empate
     if all(None not in row for row in b):
         return 'draw'
         
@@ -127,7 +124,6 @@ def get_possible_moves(b, player, local_pieces):
 
 def apply_move(b, move, player, update_pieces=True, local_pieces=None):
     """Aplica un movimiento al tablero y opcionalmente actualiza el contador de piezas."""
-    # Usar el diccionario global si no se pasa uno local
     pieces_to_update = local_pieces if local_pieces is not None else globals()['pieces']
     
     if move[0] == 'place':
@@ -152,9 +148,9 @@ def minimax(b, player, depth, maximizing, alpha, beta, local_pieces):
     winner = check_winner(b)
     if winner is not None:
         if winner == PLAYER_AI:
-            return 1 + depth # Prefiere ganar antes
+            return 1 + depth # IA gana (Prefiere ganar antes)
         elif winner == PLAYER_HUMAN:
-            return -1 - depth # Penaliza perder antes
+            return -1 - depth # Humano gana (Penaliza perder antes)
         else:
             return 0
     
@@ -216,7 +212,6 @@ def get_best_move(b, player, pieces_counter):
         if (is_maximizing and val > best_val) or (not is_maximizing and val < best_val):
             best_val = val
             best_m = move
-            # Opcional: print(f"  Nuevo mejor movimiento: {best_m} con valor: {best_val}")
 
     print(f"Mejor valor final: {best_val}")
     return best_m
@@ -226,10 +221,6 @@ def get_best_move(b, player, pieces_counter):
 def find_board_and_pieces(frame):
     """
     Detecta la región del tablero y las fichas azules ('X').
-    
-    Retorna:
-    - board_roi (tuple): (x, y, w, h) del tablero, o None.
-    - piece_coords (list): Lista de (fila, columna) de las piezas detectadas.
     """
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     
@@ -269,7 +260,6 @@ def find_board_and_pieces(frame):
                 cx = int(M["m10"] / M["m00"])
                 cy = int(M["m01"] / M["m00"])
                 
-                # Mapear el centro de la pieza a una celda del tablero
                 if x <= cx <= x + w and y <= cy <= y + h:
                     i = (cy - y) // cell_h
                     j = (cx - x) // cell_w
@@ -277,7 +267,6 @@ def find_board_and_pieces(frame):
                     if 0 <= i < 3 and 0 <= j < 3:
                         blue_piece_coords.append((i, j))
                         
-    # Eliminar duplicados
     blue_piece_coords = sorted(list(set(blue_piece_coords)))
     
     return board_roi, blue_piece_coords
@@ -287,9 +276,7 @@ def find_board_and_pieces(frame):
 
 def player_turn(player, current_board, pieces_counter, robot_controller):
     """
-    Maneja el turno del jugador humano.
-    CORRECCIÓN CLAVE: Usa el último frame estable para el análisis
-    después de presionar ENTER, evitando reabrir la cámara y fallar la detección.
+    Maneja el turno del jugador humano, con lógica robusta para diferenciar colocación vs. movimiento.
     """
     print(f"\n--- Turno de {player} (Humano) ---")
     
@@ -342,7 +329,6 @@ def player_turn(player, current_board, pieces_counter, robot_controller):
                     print("❌ Error: No se ha capturado ninguna imagen estable para el análisis. Intenta de nuevo.")
                     continue
                 
-                # Cerrar ANTES del análisis para evitar interferencia
                 cap.release()
                 cv2.destroyAllWindows()
                 
@@ -364,33 +350,50 @@ def player_turn(player, current_board, pieces_counter, robot_controller):
                         was_human = old_board[r][c] == PLAYER_HUMAN
                         
                         if not was_human and is_now_human:
-                            placed_at.append((r, c))
+                            placed_at.append((r, c)) # Detectada una pieza en una casilla antes vacía
                         elif was_human and not is_now_human:
-                            removed_from.append((r, c))
+                            removed_from.append((r, c)) # Pieza removida de una casilla antes ocupada
 
                 # Validar el movimiento
                 valid_move = False
                 move_details = None
                 
-                if pieces_counter[PLAYER_HUMAN] < 3: # Colocación
+                current_human_pieces = pieces_counter[PLAYER_HUMAN]
+                
+                # === LÓGICA DE VALIDACIÓN ROBUSTA ===
+                
+                if current_human_pieces < 3: # Fase de COLOCACIÓN (0, 1, 2 piezas)
                     if len(placed_at) == 1 and not removed_from:
                         i, j = placed_at[0]
                         move_details = ('place', i, j)
                         valid_move = True
-                        print(f"✅ Detección: Colocación en ({i},{j}).")
+                        print(f"✅ Detección de Colocación en ({i},{j}).")
                     else:
-                        print(f"❌ Error: Se esperaban 1 pieza nueva (colocación).")
-                        
-                else: # Movimiento
+                        print(f"❌ Error: En fase de COLOCACIÓN ({current_human_pieces} piezas), se esperaban 1 pieza nueva y 0 eliminadas. Detectadas {len(placed_at)} nuevas y {len(removed_from)} eliminadas.")
+                
+                elif current_human_pieces == 3: # Fase de MOVIMIENTO (3 piezas)
                     if len(placed_at) == 1 and len(removed_from) == 1:
                         i_removed, j_removed = removed_from[0]
                         i_placed, j_placed = placed_at[0]
                         move_details = ('move', i_removed, j_removed, i_placed, j_placed)
                         valid_move = True
-                        print(f"✅ Detección: Movimiento de ({i_removed},{j_removed}) a ({i_placed},{j_placed}).")
+                        print(f"✅ Detección de Movimiento de ({i_removed},{j_removed}) a ({i_placed},{j_placed}).")
                     else:
-                        print(f"❌ Error: Se esperaba 1 pieza movida.")
+                        print(f"❌ Error: En fase de MOVIMIENTO ({current_human_pieces} piezas), se esperaban 1 pieza nueva y 1 eliminada. Detectadas {len(placed_at)} nuevas y {len(removed_from)} eliminadas.")
                 
+                else:
+                    # Este caso es un error lógico grave (más de 3 piezas), pero lo manejamos
+                    print(f"⚠️ Error Crítico: El contador de piezas es {current_human_pieces} (más de 3). Intentando validar como MOVIMIENTO.")
+                    if len(placed_at) == 1 and len(removed_from) == 1:
+                        i_removed, j_removed = removed_from[0]
+                        i_placed, j_placed = placed_at[0]
+                        move_details = ('move', i_removed, j_removed, i_placed, j_placed)
+                        valid_move = True
+                        print(f"✅ Detección forzada de Movimiento de ({i_removed},{j_removed}) a ({i_placed},{j_placed}).")
+                    else:
+                        print("❌ El estado es irrecuperable. Termina el juego o reinicia.")
+                        return False
+
                 # Aplicar o reintentar
                 if valid_move:
                     apply_move(current_board, move_details, PLAYER_HUMAN, update_pieces=True, local_pieces=pieces_counter)

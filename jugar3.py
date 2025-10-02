@@ -30,15 +30,16 @@ COORDS_ROBOT = {
 }
 
 # Configuración de detección de colores (HSV)
+# === AJUSTES CLAVE AQUÍ ===
 COLOR_RANGES = {
-    # ROJO (Piezas de la IA 'O')
+    # ROJO (Piezas de la IA 'O') - Mantenemos un rango amplio para el tablero/fichas rojas
     'O': [
-        (np.array([0, 100, 50]), np.array([10, 255, 255])),
-        (np.array([170, 100, 50]), np.array([180, 255, 255]))
+        (np.array([0, 80, 50]), np.array([15, 255, 255])),  # Primer rango de rojo (más saturación/brillo)
+        (np.array([165, 80, 50]), np.array([180, 255, 255])) # Segundo rango de rojo
     ],
-    # AZUL (Piezas Humanas 'X')
+    # AZUL (Piezas Humanas 'X') - Hacemos el rango más inclusivo para S y V
     'X': [
-        (np.array([90, 100, 50]), np.array([130, 255, 255]))
+        (np.array([90, 50, 50]), np.array([140, 255, 255])) # Aumentado el rango de Hue, bajado S y V mínimos
     ]
 }
 
@@ -237,7 +238,8 @@ def find_board_and_pieces(frame):
     c = max(contours_board, key=cv2.contourArea)
     area = cv2.contourArea(c)
     
-    if area < 1000: # Filtro de área mínima
+    if area < 500: # Ajustado: Bajar el área mínima para el tablero si es pequeño. Originalmente 1000
+         print(f"DEBUG: Área de contorno del tablero muy pequeña: {area}")
          return None, []
 
     x, y, w, h = cv2.boundingRect(c)
@@ -254,7 +256,8 @@ def find_board_and_pieces(frame):
     
     for cnt in contours_azul:
         area_piece = cv2.contourArea(cnt)
-        if 200 < area_piece < 10000: 
+        # === AJUSTE CLAVE AQUÍ ===
+        if 50 < area_piece < 5000: # Bajado el mínimo de 200 a 50 para piezas pequeñas, ajustado el máximo.
             M = cv2.moments(cnt)
             if M["m00"] != 0:
                 cx = int(M["m10"] / M["m00"])
@@ -266,8 +269,14 @@ def find_board_and_pieces(frame):
                     
                     if 0 <= i < 3 and 0 <= j < 3:
                         blue_piece_coords.append((i, j))
+                else:
+                    print(f"DEBUG: Pieza azul detectada (area={area_piece}) fuera del ROI del tablero.")
+            else:
+                print("DEBUG: Momentos de contorno azul con m00=0.")
+        else:
+             print(f"DEBUG: Contorno azul (area={area_piece}) no pasó el filtro de área de pieza (50-5000).")
                         
-    blue_piece_coords = sorted(list(set(blue_piece_coords)))
+    blue_piece_coords = sorted(list(set(blue_piece_coords))) # Eliminar duplicados
     
     return board_roi, blue_piece_coords
 
@@ -317,6 +326,21 @@ def player_turn(player, current_board, pieces_counter, robot_controller):
                     cx = x + cell_w // 2 + j * cell_w
                     cy = y + cell_h // 2 + i * cell_h
                     cv2.circle(frame, (cx, cy), 15, (0, 255, 255), -1)
+            # else:
+            #     print("DEBUG: Tablero no detectado en el frame de vista previa.")
+
+
+            # --- OPCIONAL: Visualizar máscaras para depuración ---
+            # Si quieres ver qué colores detecta, descomenta estas líneas y presiona 'm' para alternar
+            # hsv_debug = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            # mask_azul_debug = cv2.inRange(hsv_debug, *COLOR_RANGES['X'][0])
+            # mask_rojo_debug1 = cv2.inRange(hsv_debug, *COLOR_RANGES['O'][0])
+            # mask_rojo_debug2 = cv2.inRange(hsv_debug, *COLOR_RANGES['O'][1])
+            # mask_rojo_total = mask_rojo_debug1 | mask_rojo_debug2
+            # cv2.imshow("Mask Azul (X)", mask_azul_debug)
+            # cv2.imshow("Mask Rojo (O/Tablero)", mask_rojo_total)
+            # --- Fin de visualización de máscaras ---
+
 
             cv2.imshow("Coloca tu ficha", frame)
 
@@ -382,7 +406,6 @@ def player_turn(player, current_board, pieces_counter, robot_controller):
                         print(f"❌ Error: En fase de MOVIMIENTO ({current_human_pieces} piezas), se esperaban 1 pieza nueva y 1 eliminada. Detectadas {len(placed_at)} nuevas y {len(removed_from)} eliminadas.")
                 
                 else:
-                    # Este caso es un error lógico grave (más de 3 piezas), pero lo manejamos
                     print(f"⚠️ Error Crítico: El contador de piezas es {current_human_pieces} (más de 3). Intentando validar como MOVIMIENTO.")
                     if len(placed_at) == 1 and len(removed_from) == 1:
                         i_removed, j_removed = removed_from[0]
@@ -400,7 +423,6 @@ def player_turn(player, current_board, pieces_counter, robot_controller):
                     return True
                 else:
                     print("Por favor, corrige el movimiento en el tablero y presiona ENTER de nuevo.")
-                    # Reabrir la cámara para reanudar la vista previa
                     cap = cv2.VideoCapture(CAM_ID) 
                     if not cap.isOpened():
                         print("❌ Error al reabrir la cámara.")

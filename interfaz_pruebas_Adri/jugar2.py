@@ -208,9 +208,13 @@ def player_turn(player):
         print("❌ No se pudo abrir la cámara")
         return None
 
-    old_board = copy.deepcopy(board) # Guarda el estado del tablero antes del movimiento
+    old_board = copy.deepcopy(board)  # Save the board state before the move
     print("Coloca tu ficha azul. La cámara está en vivo. Presiona Enter cuando hayas terminado.")
-    
+
+    # Variables for keypress timeout
+    start_time = time.time()
+    timeout = 60  # Timeout after 60 seconds
+
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -226,32 +230,44 @@ def player_turn(player):
             cell_w = w // 3
             cell_h = h // 3
             for i, j in detected_pieces:
-                cx = x + cell_w//2 + j*cell_w
-                cy = y + cell_h//2 + i*cell_h
+                cx = x + cell_w // 2 + j * cell_w
+                cy = y + cell_h // 2 + i * cell_h
                 cv2.circle(frame, (cx, cy), 15, (255, 255, 0), -1)
 
         cv2.imshow("Coloca tu ficha azul", frame)
 
-        key = cv2.waitKey(1)
-        if key == 13:  # Enter
+        # Increase waitKey delay to improve key detection reliability
+        key = cv2.waitKey(10)  # Increased from 1ms to 10ms
+        if key == 13:  # Enter key
+            # Release camera temporarily to ensure final frame capture
             cap.release()
             cv2.destroyAllWindows()
-            
-            # Obtén el estado final del tablero y compáralo con el estado inicial
-            ret, frame = cv2.VideoCapture(CAM).read()
+
+            # Reopen camera for final capture
+            cap = cv2.VideoCapture(CAM)
+            if not cap.isOpened():
+                print("❌ No se pudo reabrir la cámara")
+                return None
+
+            # Capture final frame
+            ret, frame = cap.read()
+            cap.release()
             if not ret:
-                print("❌ Error al capturar la imagen final.")
-                return
-            
+                print("❌ Error al capturar la imagen final")
+                return None
+
+            # Detect final board state
             _, final_detected_pieces = find_pieces_on_board(frame)
+
+            # Create new board state from detected pieces
             new_board = [[None, None, None] for _ in range(3)]
             for (i, j) in final_detected_pieces:
                 if 0 <= i < 3 and 0 <= j < 3:
                     new_board[i][j] = 'X'
-            
+
+            # Compare old and new board to detect changes
             placed_at = []
             removed_from = []
-
             for r in range(3):
                 for c in range(3):
                     if old_board[r][c] is None and new_board[r][c] == 'X':
@@ -259,33 +275,55 @@ def player_turn(player):
                     elif old_board[r][c] == 'X' and new_board[r][c] is None:
                         removed_from.append((r, c))
 
-            if pieces['X'] < 3:
+            # Validate move
+            if pieces['X'] < 3:  # Placing a new piece
                 if len(placed_at) == 1 and not removed_from:
                     i, j = placed_at[0]
-                    board[i][j] = 'X'
-                    pieces['X'] += 1
-                    print(f"✅ Ficha colocada en ({i},{j}). Total de fichas: {pieces['X']}")
-                    return
+                    if board[i][j] is None:  # Ensure the position is empty
+                        board[i][j] = 'X'
+                        pieces['X'] += 1
+                        print(f"✅ Ficha colocada en ({i},{j}). Total de fichas: {pieces['X']}")
+                        return
+                    else:
+                        print(f"❌ La casilla ({i},{j}) ya está ocupada. Inténtalo de nuevo.")
                 else:
-                    print(f"❌ Error en la detección. Se esperaban 1 pieza nueva. Se detectaron {len(placed_at)} nuevas y {len(removed_from)} eliminadas.")
-                    print("Por favor, inténtalo de nuevo.")
-            else: # Más de 3 fichas, es un movimiento
+                    print(f"❌ Detección inválida: {len(placed_at)} fichas nuevas, {len(removed_from)} eliminadas. Inténtalo de nuevo.")
+            else:  # Moving an existing piece
                 if len(placed_at) == 1 and len(removed_from) == 1:
                     i_removed, j_removed = removed_from[0]
                     i_placed, j_placed = placed_at[0]
-                    board[i_removed][j_removed] = None
-                    board[i_placed][j_placed] = 'X'
-                    print(f"✅ Ficha movida de ({i_removed},{j_removed}) a ({i_placed},{j_placed}).")
-                    return
+                    if board[i_placed][j_placed] is None:  # Ensure destination is empty
+                        board[i_removed][j_removed] = None
+                        board[i_placed][j_placed] = 'X'
+                        print(f"✅ Ficha movida de ({i_removed},{j_removed}) a ({i_placed},{j_placed}).")
+                        return
+                    else:
+                        print(f"❌ La casilla destino ({i_placed},{j_placed}) ya está ocupada. Inténtalo de nuevo.")
                 else:
-                    print(f"❌ Error en la detección de movimiento. Se esperaba una pieza movida. Se detectaron {len(placed_at)} nuevas y {len(removed_from)} eliminadas.")
-                    print("Por favor, inténtalo de nuevo.")
+                    print(f"❌ Detección inválida: {len(placed_at)} fichas nuevas, {len(removed_from)} eliminadas. Inténtalo de nuevo.")
 
-        elif key == ord('q'):
+            # Reopen camera for next attempt
+            cap = cv2.VideoCapture(CAM)
+            if not cap.isOpened():
+                print("❌ No se pudo reabrir la cámara")
+                return None
+            print("Por favor, inténtalo de nuevo.")
+
+        elif key == ord('q'):  # Quit
             cap.release()
             cv2.destroyAllWindows()
+            print("❌ Juego terminado por el usuario")
             exit()
-            
+
+        # Timeout to prevent infinite loop
+        if time.time() - start_time > timeout:
+            cap.release()
+            cv2.destroyAllWindows()
+            print("❌ Tiempo de espera agotado. Inténtalo de nuevo.")
+            return None
+
+    cap.release()
+    cv2.destroyAllWindows()
     return None
 
 def execute_pick_and_place(move):

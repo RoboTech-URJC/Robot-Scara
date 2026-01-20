@@ -9,6 +9,7 @@
 # Scara-Robot:
 This repository will contain the development of Robotech Scara Robot.
 As SCARA stands for  Selective Compliance Assembly Robot Arm the purpose of this project is to develop the software needed so that the robotic arm can pick objects easily and do everything at :[Goals](#Objetives)
+[![Demo video](https://img.youtube.com/vi/Tudj6pG5uQk/maxresdefault.jpg)](https://youtu.be/Tudj6pG5uQk)
 
 *Technologies used:*
 ![Static Badge](https://img.shields.io/badge/Arduino-black?logo=arduino&logoColor=blue)

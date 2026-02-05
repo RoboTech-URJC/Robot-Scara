@@ -1,0 +1,143 @@
+<?xml version="1.0" ?>
+<robot name="scara" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:include filename="materials.xacro"/>
+
+
+<link name="base_link">
+  <inertial>
+    <origin xyz="-0.032360929892306156 -0.03817985577112359 -0.027455736774146224" rpy="0 0 0"/>
+    <mass value="5.219237339977411"/>
+    <inertia ixx="0.011284" iyy="0.032378" izz="0.04101" ixy="0.002711" iyz="-0.000178" ixz="-0.000376"/>
+  </inertial>
+  <visual>
+    <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+    <geometry>
+      <mesh filename="package://scara_description/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+    <geometry>
+      <mesh filename="package://scara_description/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="arm_link_1">
+  <inertial>
+    <origin xyz="0.061652068268010854 4.958390842194765e-05 -0.018720530189430318" rpy="0 0 0"/>
+    <mass value="3.3361153817528812"/>
+    <inertia ixx="0.003823" iyy="0.028454" izz="0.03056" ixy="-1e-06" iyz="0.0" ixz="0.001281"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.0755 0.04513 -0.202307" rpy="1.5708 0 0"/>
+    <geometry>
+      <mesh filename="package://scara_description/meshes/arm_link_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.0755 0.04513 -0.202307" rpy="1.5708 0 0"/>
+    <geometry>
+      <mesh filename="package://scara_description/meshes/arm_link_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="forearm_link_1">
+  <inertial>
+    <origin xyz="0.039237741083103794 0.13667447764874746 0.18305597823939246" rpy="0 0 0"/>
+    <mass value="2.839268182842396"/>
+    <inertia ixx="0.006929" iyy="0.008158" izz="0.012889" ixy="0.004912" iyz="4e-05" ixz="-4.5e-05"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.2705 0.216436 0.050022" rpy="1.5708 0 0"/>
+    <geometry>
+      <mesh filename="package://scara_description/meshes/forearm_link_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.2705 0.216436 0.050022" rpy="1.5708 0 0"/>
+    <geometry>
+      <mesh filename="package://scara_description/meshes/forearm_link_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="wrist_link_1">
+  <inertial>
+    <origin xyz="0.0007189203809285227 0.02272519446366081 0.2331044987307334" rpy="0 0 0"/>
+    <mass value="0.3289080564819458"/>
+    <inertia ixx="0.000118" iyy="0.000117" izz="0.000215" ixy="-0.0" iyz="0.0" ixz="-0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.372837 0.158436 0.130351" rpy="1.5708 0 0"/>
+    <geometry>
+      <mesh filename="package://scara_description/meshes/wrist_link_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.372837 0.158436 0.130351" rpy="1.5708 0 0"/>
+    <geometry>
+      <mesh filename="package://scara_description/meshes/wrist_link_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="z_link_1">
+  <inertial>
+    <origin xyz="0.0010129123085257999 0.00044657636701683767 0.17837058457639143" rpy="0 0 0"/>
+    <mass value="4.1421291200821075"/>
+    <inertia ixx="0.122256" iyy="0.122323" izz="0.008098" ixy="-1e-06" iyz="-0.000407" ixz="-0.000283"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.0425 0.04513 0.016693" rpy="1.5708 0 0"/>
+    <geometry>
+      <mesh filename="package://scara_description/meshes/z_link_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.0425 0.04513 0.016693" rpy="1.5708 0 0"/>
+    <geometry>
+      <mesh filename="package://scara_description/meshes/z_link_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<joint name="z_joint" type="prismatic">
+  <origin xyz="0.033 0.0 0.219" rpy="0 0 0"/>
+  <parent link="z_link_1"/>
+  <child link="arm_link_1"/>
+  <axis xyz="0.0 0.0 -1.0"/>
+  <limit upper="0.118" lower="-0.13" effort="100" velocity="100"/>
+</joint>
+
+<joint name="elbow_joint" type="continuous">
+  <origin xyz="0.195 -0.171306 -0.252329" rpy="0 0 0"/>
+  <parent link="arm_link_1"/>
+  <child link="forearm_link_1"/>
+  <axis xyz="0.0 -0.0 1.0"/>
+</joint>
+
+<joint name="wrist_joint" type="revolute">
+  <origin xyz="0.102337 0.058 -0.080329" rpy="0 0 0"/>
+  <parent link="forearm_link_1"/>
+  <child link="wrist_link_1"/>
+  <axis xyz="0.0 -0.0 1.0"/>
+  <limit upper="1.919862" lower="-2.617994" effort="100" velocity="100"/>
+</joint>
+
+<joint name="shoulder_joint" type="revolute">
+  <origin xyz="0.0425 -0.04513 -0.016693" rpy="0 0 0"/>
+  <parent link="base_link"/>
+  <child link="z_link_1"/>
+  <axis xyz="-0.0 -0.0 1.0"/>
+  <limit upper="0.872665" lower="-4.101524" effort="100" velocity="100"/>
+</joint>
+
+</robot>

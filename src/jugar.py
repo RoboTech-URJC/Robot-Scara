@@ -1,3 +1,11 @@
+"""
+Developers:
+            Adrián Manzanares ->  Github: Amanza17
+            Justo Darío ->  Github: JustoDario
+            Marcos Moreno -> Github: Marcox300
+
+"""
+
 import copy
 import serial
 import time

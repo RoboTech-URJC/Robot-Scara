@@ -11,6 +11,27 @@ long numeroBase = 0;
 long numeroMano = 0;
 long numeroZ = 0;
 
+void electroimanON() {
+  // Ponemos DIR en HIGH y damos 1 paso a la bobina
+  digitalWrite(dirPinA, HIGH);
+  digitalWrite(stepPinA, HIGH);
+  delayMicroseconds(50);
+  digitalWrite(stepPinA, LOW);
+  Serial.println("[ESTADO] -> ENCENDIDO");
+}
+
+void electroimanOFF() {
+  // Damos 2 micropasos para desplazar el chopper a la fase contraria / corte
+  digitalWrite(dirPinA, LOW);
+  for(int i = 0; i < 2; i++) {
+    digitalWrite(stepPinA, HIGH);
+    delayMicroseconds(50);
+    digitalWrite(stepPinA, LOW);
+    delayMicroseconds(50);
+  }
+  Serial.println("[ESTADO] -> APAGADO");
+}
+
 void setup() {
   Serial.begin(115200);
   pinMode(ENABLE_PIN, OUTPUT);

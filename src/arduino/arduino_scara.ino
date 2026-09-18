@@ -6,6 +6,8 @@ AccelStepper motorMano(AccelStepper::DRIVER, 3, 6);
 AccelStepper motorZ(AccelStepper::DRIVER, 4, 7);
 
 const int ENABLE_PIN = 8;
+const int stepPinA = 12; // D12
+const int dirPinA  = 13; // D13
 
 long numeroBase = 0;
 long numeroMano = 0;

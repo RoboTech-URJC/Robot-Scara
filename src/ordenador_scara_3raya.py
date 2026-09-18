@@ -42,6 +42,15 @@ COORDS = {
     (2, 2): (1219, -875, -820),
 }
 
+# ===== CONSTANTES DEL ELECTROIMÁN =====
+# Estos son los strings que tus becarios deben añadir en el "case" del Arduino
+CMD_IMAN_ON = "Y ENCENDER Y"  
+CMD_IMAN_OFF = "Z APAGAR Z"
+
+# Alturas Z para la rutina
+Z_SEGURO = 0      # Altura para moverse lateralmente sin chocar
+Z_ABAJO = -820    # Altura del tablero/fichas para coger o dejar
+
 # ===== FUNCIONES GENERALES =====
 def print_board(b):
     print("\n  0 1 2")
@@ -60,13 +69,11 @@ def check_winner(b):
 def get_possible_moves(b, player, local_pieces):
     moves = []
     if local_pieces[player] < 3:
-        # Colocar nueva ficha
         for i in range(3):
             for j in range(3):
                 if b[i][j] is None:
                     moves.append(('place', i, j))
     else:
-        # Mover ficha existente
         for i in range(3):
             for j in range(3):
                 if b[i][j] == player:
@@ -101,12 +108,9 @@ def apply_move(b, move, player, real=True, local_pieces=None):
 # ===== IA (MINIMAX CON ALPHA-BETA PRUNING) =====
 def minimax(b, player, depth, maximizing, alpha, beta, local_pieces):
     winner = check_winner(b)
-    if winner == 'X':
-        return 1
-    elif winner == 'O':
-        return -1
-    elif winner == 'draw' or depth == 0:
-        return 0
+    if winner == 'X': return 1
+    elif winner == 'O': return -1
+    elif winner == 'draw' or depth == 0: return 0
 
     if maximizing:
         max_eval = -float('inf')
@@ -117,8 +121,7 @@ def minimax(b, player, depth, maximizing, alpha, beta, local_pieces):
             eval = minimax(new_board, 'O', depth-1, False, alpha, beta, new_pieces)
             max_eval = max(max_eval, eval)
             alpha = max(alpha, eval)
-            if beta <= alpha:
-                break
+            if beta <= alpha: break
         return max_eval
     else:
         min_eval = float('inf')
@@ -129,14 +132,12 @@ def minimax(b, player, depth, maximizing, alpha, beta, local_pieces):
             eval = minimax(new_board, 'X', depth-1, True, alpha, beta, new_pieces)
             min_eval = min(min_eval, eval)
             beta = min(min_eval, eval)
-            if beta <= alpha:
-                break
+            if beta <= alpha: break
         return min_eval
 
 def best_move(b, player):
     moves = get_possible_moves(b, player, pieces)
-    if not moves:
-        return None
+    if not moves: return None
     best_val = -float('inf') if player == 'X' else float('inf')
     best_m = moves[0]
     for move in moves:
@@ -149,16 +150,23 @@ def best_move(b, player):
             best_m = move
     return best_m
 
-# ===== COMUNICACIÓN SERIAL =====
-def send_to_arduino(coords):
+# ===== COMUNICACIÓN SERIAL MODIFICADA =====
+def send_to_arduino(data):
     if arduino is None:
-        print("❌ Arduino no conectado, omitiendo envío")
+        print(f"❌ Arduino no conectado, omitiendo envío: {data}")
         return
     try:
-        linea = f"{coords[0]} {coords[1]} {coords[2]}"
+        # Detecta si es una tupla de coordenadas o un comando string
+        if isinstance(data, (tuple, list)):
+            linea = f"{data[0]} {data[1]} {data[2]}"
+        else:
+            linea = str(data)
+            
         print(f"[SERIAL] Enviando: {linea}")
         arduino.write((linea + '\n').encode())
-        time.sleep(2)
+        
+        # Mantenemos la pausa de Python para dar tiempo al movimiento físico
+        time.sleep(2) 
     except serial.SerialException as e:
         print(f"❌ Error al enviar a Arduino: {e}")
 
@@ -181,12 +189,10 @@ def find_pieces_on_board(frame):
         return None, []
     
     c = max(contours_rojo, key=cv2.contourArea)
-    
     x, y, w, h = cv2.boundingRect(c)
     board_roi = (x, y, w, h)
     
     contours_azul, _ = cv2.findContours(mask_azul, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
     blue_piece_coords = []
     cell_w = w // 3
     cell_h = h // 3
@@ -198,19 +204,15 @@ def find_pieces_on_board(frame):
             if M["m00"] != 0:
                 cx = int(M["m10"] / M["m00"])
                 cy = int(M["m01"] / M["m00"])
-                
                 if x <= cx <= x+w and y <= cy <= y+h:
                     i = (cy - y) // cell_h
                     j = (cx - x) // cell_w
                     blue_piece_coords.append((i, j))
-    
     return board_roi, blue_piece_coords
 
-# ===== FUNCIÓN PARA MANEJAR CLICS DEL MOUSE =====
 def mouse_callback(event, x, y, flags, param):
     global confirm_clicked
     if event == cv2.EVENT_LBUTTONDOWN:
-        # Check if click is within the button area
         button_x, button_y, button_w, button_h = param
         if button_x <= x <= button_x + button_w and button_y <= y <= button_y + button_h:
             confirm_clicked = True
@@ -219,161 +221,137 @@ def mouse_callback(event, x, y, flags, param):
 def player_turn(player):
     global board, pieces, confirm_clicked
     print(f"\nTurno de {player}")
-    
     cap = cv2.VideoCapture(CAM)
     if not cap.isOpened():
         print("❌ No se pudo abrir la cámara")
         return None
 
-    old_board = copy.deepcopy(board)  # Save the board state before the move
+    old_board = copy.deepcopy(board)
     print("Coloca o mueve tu ficha azul. Presiona Enter o haz clic en 'Confirmar' cuando hayas terminado.")
 
-    # Variables for timeout and button
     start_time = time.time()
-    timeout = 60  # Timeout after 60 seconds
-    confirm_clicked = False  # Flag for button click
+    timeout = 60
+    confirm_clicked = False
     window_name = "Coloca tu ficha azul"
     cv2.namedWindow(window_name)
 
-    # Button properties
-    button_x = 10
-    button_y = 10
-    button_w = 100
-    button_h = 40
+    button_x, button_y, button_w, button_h = 10, 10, 100, 40
     cv2.setMouseCallback(window_name, mouse_callback, (button_x, button_y, button_w, button_h))
 
     while True:
         ret, frame = cap.read()
-        if not ret:
-            print("❌ Error al capturar imagen")
-            break
-
+        if not ret: break
         board_roi, detected_pieces = find_pieces_on_board(frame)
         
         if board_roi:
             x, y, w, h = board_roi
             cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
-            
-            cell_w = w // 3
-            cell_h = h // 3
+            cell_w, cell_h = w // 3, h // 3
             for i, j in detected_pieces:
                 cx = x + cell_w // 2 + j * cell_w
                 cy = y + cell_h // 2 + i * cell_h
                 cv2.circle(frame, (cx, cy), 15, (255, 255, 0), -1)
 
-        # Draw the Confirm button
         cv2.rectangle(frame, (button_x, button_y), (button_x + button_w, button_y + button_h), (0, 255, 0), -1)
-        cv2.putText(frame, "Confirmar", (button_x + 10, button_y + 30), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-
+        cv2.putText(frame, "Confirmar", (button_x + 10, button_y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
         cv2.imshow(window_name, frame)
 
-        # Check for Enter key or button click
-        key = cv2.waitKey(10)  # 10ms delay for reliable key detection
-        if key == 13 or confirm_clicked:  # Enter key or button clicked
-            confirm_clicked = False  # Reset button flag
-            # Capture final frame
+        key = cv2.waitKey(10)
+        if key == 13 or confirm_clicked:
+            confirm_clicked = False
             ret, frame = cap.read()
-            if not ret:
-                print("❌ Error al capturar la imagen final")
-                cap.release()
-                cv2.destroyAllWindows()
-                return None
+            if not ret: break
 
-            # Detect final board state
             _, final_detected_pieces = find_pieces_on_board(frame)
-
-            # Create new board state from detected pieces
             new_board = [[None, None, None] for _ in range(3)]
             for (i, j) in final_detected_pieces:
-                if 0 <= i < 3 and 0 <= j < 3:
-                    new_board[i][j] = 'X'
+                if 0 <= i < 3 and 0 <= j < 3: new_board[i][j] = 'X'
 
-            # Compare old and new board to detect changes
-            placed_at = []
-            removed_from = []
+            placed_at, removed_from = [], []
             for r in range(3):
                 for c in range(3):
-                    if old_board[r][c] is None and new_board[r][c] == 'X':
-                        placed_at.append((r, c))
-                    elif old_board[r][c] == 'X' and new_board[r][c] is None:
-                        removed_from.append((r, c))
+                    if old_board[r][c] is None and new_board[r][c] == 'X': placed_at.append((r, c))
+                    elif old_board[r][c] == 'X' and new_board[r][c] is None: removed_from.append((r, c))
 
-            # Check if board state is unchanged
             if not placed_at and not removed_from:
                 print("❌ No se detectó ningún cambio en el tablero. Turno saltado.")
-                cap.release()
-                cv2.destroyAllWindows()
-                return
+                break
 
-            # Validate move
-            if pieces['X'] < 3:  # Placing a new piece
+            if pieces['X'] < 3:
                 if len(placed_at) == 1 and not removed_from:
                     i, j = placed_at[0]
-                    if board[i][j] is None:  # Ensure the position is empty
+                    if board[i][j] is None:
                         board[i][j] = 'X'
                         pieces['X'] += 1
                         print(f"✅ Ficha colocada en ({i},{j}). Total de fichas: {pieces['X']}")
-                        cap.release()
-                        cv2.destroyAllWindows()
-                        return
-                    else:
-                        print(f"❌ La casilla ({i},{j}) ya está ocupada. Turno saltado.")
-                else:
-                    print(f"❌ Detección inválida: {len(placed_at)} fichas nuevas, {len(removed_from)} eliminadas. Turno saltado.")
-            else:  # Moving an existing piece
+                        break
+            else:
                 if len(placed_at) == 1 and len(removed_from) == 1:
                     i_removed, j_removed = removed_from[0]
                     i_placed, j_placed = placed_at[0]
-                    if board[i_placed][j_placed] is None:  # Ensure destination is empty
+                    if board[i_placed][j_placed] is None:
                         board[i_removed][j_removed] = None
                         board[i_placed][j_placed] = 'X'
                         print(f"✅ Ficha movida de ({i_removed},{j_removed}) a ({i_placed},{j_placed}).")
-                        cap.release()
-                        cv2.destroyAllWindows()
-                        return
-                    else:
-                        print(f"❌ La casilla destino ({i_placed},{j_placed}) ya está ocupada. Turno saltado.")
-                else:
-                    print(f"❌ Detección inválida: {len(placed_at)} fichas nuevas, {len(removed_from)} eliminadas. Turno saltado.")
+                        break
 
-            cap.release()
-            cv2.destroyAllWindows()
-            return  # Skip turn on invalid move
-
-        elif key == ord('q'):  # Quit
-            cap.release()
-            cv2.destroyAllWindows()
-            print("❌ Juego terminado por el usuario")
-            exit()
-
-        # Timeout to prevent infinite loop
-        if time.time() - start_time > timeout:
-            cap.release()
-            cv2.destroyAllWindows()
-            print("❌ Tiempo de espera agotado. Turno saltado.")
-            return None
+            break
+        elif key == ord('q'): exit()
+        if time.time() - start_time > timeout: break
 
     cap.release()
     cv2.destroyAllWindows()
     return None
 
+# ===== RUTINA DE PICK & PLACE VERDADERA =====
 def execute_pick_and_place(move):
+    # Separamos el ORIGIN para usar sus X e Y, pero poder controlar la altura (Z) libremente
+    origen_x, origen_y, _ = ORIGIN
+
     if move[0] == 'place':
         _, i, j = move
         dest = COORDS[(i, j)]
-        print(f"[PICK&PLACE] IA coloca ficha en {i},{j}")
-        send_to_arduino(ORIGIN)
-        send_to_arduino(dest)
-        send_to_arduino(ORIGIN)
+        print(f"[PICK&PLACE] IA coge nueva ficha y coloca en {i},{j}")
+        
+        # --- COGER FICHA ---
+        send_to_arduino((origen_x, origen_y, Z_SEGURO))   # 1. Posicionarse sobre el origen
+        send_to_arduino((origen_x, origen_y, Z_ABAJO))    # 2. Bajar
+        send_to_arduino(CMD_IMAN_ON)                      # 3. Encender imán
+        send_to_arduino("X 1000 X")                       # *. Pausa en Arduino de 1 seg para asegurar el agarre
+        send_to_arduino((origen_x, origen_y, Z_SEGURO))   # 4. Subir con la ficha
+
+        # --- DEJAR FICHA ---
+        send_to_arduino((dest[0], dest[1], Z_SEGURO))     # 5. Moverse sobre el destino
+        send_to_arduino((dest[0], dest[1], Z_ABAJO))      # 6. Bajar al tablero
+        send_to_arduino(CMD_IMAN_OFF)                     # 7. Apagar imán
+        send_to_arduino("X 1000 X")                       # *. Pausa en Arduino para asegurar que la suelta
+        send_to_arduino((dest[0], dest[1], Z_SEGURO))     # 8. Subir
+
+        # --- RETORNO ---
+        send_to_arduino((origen_x, origen_y, Z_SEGURO))   # 9. Volver a standby
+
     elif move[0] == 'move':
         _, i, j, x, y = move
         start = COORDS[(i, j)]
         dest = COORDS[(x, y)]
         print(f"[PICK&PLACE] IA mueve ficha de ({i},{j}) a ({x},{y})")
-        send_to_arduino(start)
-        send_to_arduino(dest)
-        send_to_arduino(ORIGIN)
+        
+        # --- COGER FICHA DEL TABLERO ---
+        send_to_arduino((start[0], start[1], Z_SEGURO))   # 1. Posicionarse sobre la ficha a mover
+        send_to_arduino((start[0], start[1], Z_ABAJO))    # 2. Bajar
+        send_to_arduino(CMD_IMAN_ON)                      # 3. Encender imán
+        send_to_arduino("X 1000 X")                       # *. Pausa en Arduino
+        send_to_arduino((start[0], start[1], Z_SEGURO))   # 4. Subir con la ficha
+
+        # --- DEJAR FICHA EN NUEVA CASILLA ---
+        send_to_arduino((dest[0], dest[1], Z_SEGURO))     # 5. Moverse sobre el destino
+        send_to_arduino((dest[0], dest[1], Z_ABAJO))      # 6. Bajar al tablero
+        send_to_arduino(CMD_IMAN_OFF)                     # 7. Apagar imán
+        send_to_arduino("X 1000 X")                       # *. Pausa en Arduino
+        send_to_arduino((dest[0], dest[1], Z_SEGURO))     # 8. Subir
+
+        # --- RETORNO ---
+        send_to_arduino((origen_x, origen_y, Z_SEGURO))   # 9. Volver a standby
 
 def play_game():
     current_player = 'X'  # Humano

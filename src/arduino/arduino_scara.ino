@@ -37,6 +37,11 @@ void setup() {
   pinMode(ENABLE_PIN, OUTPUT);
   digitalWrite(ENABLE_PIN, LOW); // Habilitar drivers
 
+  // Configuración del electroimán / pines adicionales
+  pinMode(stepPinA, OUTPUT);
+  pinMode(dirPinA, OUTPUT);
+  electroimanOFF(); // Asegura que el electroimán empiece apagado
+
   motorBase.setMaxSpeed(1000); motorBase.setAcceleration(500);
   motorMano.setMaxSpeed(1000); motorMano.setAcceleration(500);
   motorZ.setMaxSpeed(1000); motorZ.setAcceleration(500);
@@ -66,6 +71,14 @@ void loop() {
         Serial.println(" ms");
         delay(tiempo); // Pausa
       }
+    } else if (linea.startsWith("Y") && linea.endsWith("Y")) {
+      // Encendido del electroimán
+      electroimanON();
+
+    } else if (linea.startsWith("Z") && linea.endsWith("Z")) {
+      // Apagado del electroimán
+      electroimanOFF();
+      
     } else {
       // Comando de movimiento
       int primerEspacio = linea.indexOf(' ');

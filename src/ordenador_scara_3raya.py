@@ -43,13 +43,13 @@ COORDS = {
 }
 
 # ===== CONSTANTES DEL ELECTROIMÁN =====
-# Estos son los strings que tus becarios deben añadir en el "case" del Arduino
+
 CMD_IMAN_ON = "Y ENCENDER Y"  
 CMD_IMAN_OFF = "Z APAGAR Z"
 
 # Alturas Z para la rutina
-Z_SEGURO = 0      # Altura para moverse lateralmente sin chocar
-Z_ABAJO = -820    # Altura del tablero/fichas para coger o dejar
+Z_SEGURO = -820      # Altura para moverse lateralmente sin chocar
+Z_ABAJO = -850    # Altura del tablero/fichas para coger o dejar (reducir para bajar mas)
 
 # ===== FUNCIONES GENERALES =====
 def print_board(b):

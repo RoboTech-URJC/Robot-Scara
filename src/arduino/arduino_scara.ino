@@ -6,31 +6,18 @@ AccelStepper motorMano(AccelStepper::DRIVER, 3, 6);
 AccelStepper motorZ(AccelStepper::DRIVER, 4, 7);
 
 const int ENABLE_PIN = 8;
-const int stepPinA = 12; // D12
-const int dirPinA  = 13; // D13
-
+const int MAGNET_PIN = A0;
 long numeroBase = 0;
 long numeroMano = 0;
 long numeroZ = 0;
 
 void electroimanON() {
-  // Ponemos DIR en HIGH y damos 1 paso a la bobina
-  digitalWrite(dirPinA, HIGH);
-  digitalWrite(stepPinA, HIGH);
-  delayMicroseconds(50);
-  digitalWrite(stepPinA, LOW);
+  digitalWrite(MAGNET_PIN, HIGH);
   Serial.println("[ESTADO] -> ENCENDIDO");
 }
 
 void electroimanOFF() {
-  // Damos 2 micropasos para desplazar el chopper a la fase contraria / corte
-  digitalWrite(dirPinA, LOW);
-  for(int i = 0; i < 2; i++) {
-    digitalWrite(stepPinA, HIGH);
-    delayMicroseconds(50);
-    digitalWrite(stepPinA, LOW);
-    delayMicroseconds(50);
-  }
+  digitalWrite(MAGNET_PIN, LOW);
   Serial.println("[ESTADO] -> APAGADO");
 }
 
@@ -39,9 +26,8 @@ void setup() {
   pinMode(ENABLE_PIN, OUTPUT);
   digitalWrite(ENABLE_PIN, LOW); // Habilitar drivers
 
-  // Configuración del electroimán / pines adicionales
-  pinMode(stepPinA, OUTPUT);
-  pinMode(dirPinA, OUTPUT);
+  // Configuración del electroimán
+  pinMode(MAGNET_PIN, OUTPUT);
   electroimanOFF(); // Asegura que el electroimán empiece apagado
 
   motorBase.setMaxSpeed(1000); motorBase.setAcceleration(500);

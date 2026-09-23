@@ -30,45 +30,56 @@ void setup() {
   pinMode(MAGNET_PIN, OUTPUT);
   electroimanOFF(); // Asegura que el electroimán empiece apagado
 
-  motorBase.setMaxSpeed(1000); motorBase.setAcceleration(500);
-  motorMano.setMaxSpeed(1000); motorMano.setAcceleration(500);
-  motorZ.setMaxSpeed(1000); motorZ.setAcceleration(500);
+  motorBase.setMaxSpeed(2000); motorBase.setAcceleration(1000);
+  motorMano.setMaxSpeed(2000); motorMano.setAcceleration(1000);
+  motorZ.setMaxSpeed(1200); motorZ.setAcceleration(1000);
 
   Serial.println("Arduino listo para recibir posiciones por Serial.");
   Serial.println("Formato: Base Mano Z separados por espacio, o pausa: X tiempo X, ejemplo: X 1000 X");
 }
 
+bool isMoving = false; //Flag para saber si el robot se está moviendo
+
 void loop() {
-    motorBase.run();
+  motorBase.run();
   motorMano.run();
   motorZ.run();
-  if (motorBase.distanceToGo() == 0 && motorMano.distanceToGo() == 0 && motorZ.distanceToGo() == 0){
-  if (Serial.available() > 0) {
+
+  //Comprobar si el robot estaba moviéndose y acaba de llegar a su destino
+  if (isMoving && motorBase.distanceToGo() == 0 && motorMano.distanceToGo() == 0 && motorZ.distanceToGo() == 0) {
+    isMoving = false;       // Ya ha llegado
+    Serial.println("DONE"); // Enviar confirmación al ordenador
+  }
+
+  // Solo leemos el puerto Serial si NO nos estamos moviendo
+  if (!isMoving && Serial.available() > 0) {
     String linea = Serial.readStringUntil('\n');
     linea.trim();
+    if (linea.length() == 0) return; // Ignorar líneas vacías
 
-    // Revisar si es comando de pausa: empieza y termina con X
+    // Revisar si es comando de pausa
     if (linea.startsWith("X") && linea.endsWith("X")) {
-      // Extraer el número en medio
       int primerEspacio = linea.indexOf(' ');
       int segundoEspacio = linea.lastIndexOf(' ');
       if (primerEspacio >= 0 && segundoEspacio > primerEspacio) {
         long tiempo = linea.substring(primerEspacio + 1, segundoEspacio).toInt();
-        Serial.print("Pausando ");
-        Serial.print(tiempo);
-        Serial.println(" ms");
-        delay(tiempo); // Pausa
+        Serial.print("Pausando "); Serial.print(tiempo); Serial.println(" ms");
+        delay(tiempo); 
+        Serial.println("DONE"); // Confirmar que la pausa terminó
       }
-    } else if (linea.startsWith("Y") && linea.endsWith("Y")) {
-      // Encendido del electroimán
+    } 
+    // Comando encender imán
+    else if (linea.startsWith("Y") && linea.endsWith("Y")) {
       electroimanON();
-
-    } else if (linea.startsWith("Z") && linea.endsWith("Z")) {
-      // Apagado del electroimán
+      Serial.println("DONE"); // Confirmar encendido
+    } 
+    // Comando apagar imán
+    else if (linea.startsWith("Z") && linea.endsWith("Z")) {
       electroimanOFF();
-      
-    } else {
-      // Comando de movimiento
+      Serial.println("DONE"); // Confirmar apagado
+    } 
+    // Comando de movimiento de motores
+    else {
       int primerEspacio = linea.indexOf(' ');
       int segundoEspacio = linea.lastIndexOf(' ');
 
@@ -85,10 +96,9 @@ void loop() {
         motorBase.moveTo(numeroBase);
         motorMano.moveTo(numeroMano);
         motorZ.moveTo(numeroZ);
+
+        isMoving = true; // Activar flag: Empezamos a movernos
       }
     }
-  }
-
-
   }
 }

@@ -12,7 +12,7 @@ import time
 import cv2
 import numpy as np
 
-CAM = 2
+CAM = 0
 
 # ===== CONFIGURACIÓN DE VISIÓN (MODIFICADA PARA ROBUSTEZ) =====
 
@@ -21,8 +21,8 @@ RED_HSV_HIGH_1 = np.array([10, 255, 255])
 RED_HSV_LOW_2 = np.array([170, 70, 50])
 RED_HSV_HIGH_2 = np.array([180, 255, 255])
 
-BLUE_HSV_LOW = np.array([90, 80, 50])   # Rango azul más estándar y robusto
-BLUE_HSV_HIGH = np.array([130, 255, 255])
+BLUE_HSV_LOW = np.array([90, 58, 250])   # Rango azul más estándar y robusto
+BLUE_HSV_HIGH = np.array([120, 121, 255])
 
 # Parámetros geométricos para el tablero (NUEVO)
 BOARD_MIN_AREA = 20000      # Área mínima en píxeles que debe tener el tablero en imagen
@@ -45,23 +45,23 @@ except serial.SerialException as e:
 # ===== TABLERO Y CONTADOR =====
 board = [[None, None, None] for _ in range(3)]
 pieces = {'X': 0, 'O': 0}
+primera_accion_robot = True
 
 # ===== POSICIONES FÍSICAS =====
-ORIGIN = (25, 0, 0)  # Donde están las piezas sin colocar
+ORIGIN = (0, 0, 0)  # Donde están las piezas sin colocar
 
 # Mapa de coordenadas por casilla: fila, columna
 COORDS = {
-    (0, 0): (-675, 1050, -820),
-    (0, 1): (-810, 1290, -820),
-    (0, 2): (-910, 1530, -820),
-    (1, 0): (-750, 1000, -820),
-    (1, 1): (-880, 1200, -820),
-    (1, 2): (-1000, 1350, -820),
-    (2, 0): (-790, 710, -820),
-    (2, 1): (-960, 900, -820),
-    (2, 2): (-1130, 1020, -820),
+    (0, 0): (-730, 975, 1000),
+    (0, 1): (-820, 1175, 1000),
+    (0, 2): (-975, 1350, 1000),
+    (1, 0): (-800, 800, 1000),
+    (1, 1): (-950, 1000, 1000),
+    (1, 2): (-1150, 1175, 1000),
+    (2, 0): (-800, 600, 1000),
+    (2, 1): (-975, 800, 1000),
+    (2, 2): (-1150, 900, 1000),
 }
-
 # ===== CONSTANTES DEL ELECTROIMÁN =====
 
 CMD_IMAN_ON = "Y ENCENDER Y"  
@@ -181,38 +181,38 @@ def best_move(b, player):
 def send_to_arduino(data):
     if arduino is None:
         print(f"❌ Arduino no conectado, omitiendo envío: {data}")
-        return
-    try:
-        # 1. Limpiar el buffer de entrada para no leer respuestas antiguas por error
-        arduino.reset_input_buffer()
+        return False
 
-        # 2. Formatear y enviar datos
+    try:
         if isinstance(data, (tuple, list)):
             linea = f"{data[0]} {data[1]} {data[2]}"
         else:
             linea = str(data)
-            
+
         print(f"[SERIAL] Enviando: {linea}")
         arduino.write((linea + '\n').encode())
-        
-        # 3. Bucle de espera (Handshake)
-        esperando = True
-        while esperando:
+        arduino.flush()
+
+        tiempo_inicio = time.time()
+
+        while True:
+            if time.time() - tiempo_inicio > 30:
+                print("❌ Timeout esperando DONE de Arduino.")
+                return False
+
             if arduino.in_waiting > 0:
-                # Leemos la respuesta de la Arduino
-                respuesta = arduino.readline().decode('utf-8').strip()
-                
-                ##print(f"  [ARDUINO DICE]: {respuesta}")
-                
+                respuesta = arduino.readline().decode('utf-8', errors='ignore').strip()
+
                 if respuesta == "DONE":
                     print("[SERIAL] ✅ Comando completado por Arduino.")
-                    esperando = False
+                    return True
 
-    except serial.SerialException as e:
-        print(f"❌ Error al enviar a Arduino: {e}")
+    except (serial.SerialException, OSError) as e:
+        print(f"❌ Error en comunicación con Arduino: {e}")
+        return False
 def go_to_origin():
-    print("[ROBOT] Volviendo a posición inicial 0 0 0...")
-    send_to_arduino((0, 0, 0))
+    print(f"[ROBOT] Volviendo a posición inicial {ORIGIN[0]} {ORIGIN[1]} {Z_ABAJO}...")
+    send_to_arduino((ORIGIN[0], ORIGIN[1], Z_ABAJO))
 
 # ===== VISIÓN POR COMPUTADORA =====
 def find_pieces_on_board(frame):
@@ -345,13 +345,14 @@ def mouse_callback(event, x, y, flags, param):
             confirm_clicked = True
 
 # ===== JUEGo - Jugador =====
+# ===== JUEGo - Jugador =====
 def player_turn(player):
     global board, pieces, confirm_clicked
     print(f"\nTurno de {player} (Humano)")
     cap = cv2.VideoCapture(CAM)
     if not cap.isOpened():
         print("❌ No se pudo abrir la cámara")
-        return None
+        return False # MODIFICADO: Retorna False en caso de error
 
     old_board = copy.deepcopy(board)
     print("Coloca o mueve tu ficha azul (O). Presiona 'Enter' o haz clic en 'Confirmar' cuando hayas terminado.")
@@ -368,10 +369,14 @@ def player_turn(player):
     # Limpiar buffer de teclado de OpenCV al iniciar el turno
     while cv2.waitKey(1) != -1:
         pass
+        
+    turno_exitoso = False  # NUEVO: Bandera para saber si el turno se completó bien
 
     while True:
         ret, frame = cap.read()
-        if not ret: break
+        if not ret: 
+            print("⚠️ Error leyendo cámara (Posible desconexión). Cancelando turno actual.")
+            break # Sale del bucle, turno_exitoso sigue siendo False
         
         board_roi, detected_pieces = find_pieces_on_board(frame)
         
@@ -430,6 +435,7 @@ def player_turn(player):
                         board[i][j] = 'O'
                         pieces['O'] += 1
                         print(f"✅ Ficha (O) colocada en ({i},{j}). Total de tus fichas: {pieces['O']}")
+                        turno_exitoso = True # MARCAMOS ÉXITO
                         break # Movimiento válido, salimos del turno
                 else:
                     print("❌ Movimiento inválido. Debes colocar exactamente UNA ficha nueva.")
@@ -444,6 +450,7 @@ def player_turn(player):
                         board[i_removed][j_removed] = None
                         board[i_placed][j_placed] = 'O'
                         print(f"✅ Ficha (O) movida de ({i_removed},{j_removed}) a ({i_placed},{j_placed}).")
+                        turno_exitoso = True # MARCAMOS ÉXITO
                         break # Movimiento válido, salimos del turno
                 else:
                      print("❌ Movimiento inválido. Debes mover exactamente UNA de tus fichas a una casilla vacía.")
@@ -458,57 +465,103 @@ def player_turn(player):
 
     cap.release()
     cv2.destroyAllWindows()
-    return None
+    return turno_exitoso # MODIFICADO: Retornamos si el turno se hizo bien o no
 
-# ===== RUTINA DE PICK & PLACE VERDADERA =====
 def execute_pick_and_place(move):
+
     # Separamos el ORIGIN para usar sus X e Y, pero poder controlar la altura (Z) libremente
+
     origen_x, origen_y, _ = ORIGIN
 
+
+
     if move[0] == 'place':
+
         _, i, j = move
+
         dest = COORDS[(i, j)]
+
         print(f"[PICK&PLACE] IA coge nueva ficha y coloca en {i},{j}")
-        
+
+
         # --- COGER FICHA ---
-        send_to_arduino((origen_x, origen_y, Z_SEGURO))   # 1. Posicionarse sobre el origen
-        send_to_arduino((origen_x, origen_y, Z_ABAJO))    # 2. Bajar
-        send_to_arduino(CMD_IMAN_ON)                      # 3. Encender imán
-        send_to_arduino("X 1000 X")                       # *. Pausa en Arduino de 1 seg para asegurar el agarre
-        send_to_arduino((origen_x, origen_y, Z_SEGURO))   # 4. Subir con la ficha
+
+        send_to_arduino((origen_x, origen_y, Z_SEGURO)) # 1. Posicionarse sobre el origen
+
+        send_to_arduino((origen_x, origen_y, Z_ABAJO)) # 2. Bajar
+
+        send_to_arduino(CMD_IMAN_ON) # 3. Encender imán
+
+        send_to_arduino("X 1000 X") # *. Pausa en Arduino de 1 seg para asegurar el agarre
+
+        send_to_arduino((origen_x, origen_y, Z_SEGURO)) # 4. Subir con la ficha
+
+
 
         # --- DEJAR FICHA ---
-        send_to_arduino((dest[0], dest[1], Z_SEGURO))     # 5. Moverse sobre el destino
-        send_to_arduino((dest[0], dest[1], Z_ABAJO))      # 6. Bajar al tablero
-        send_to_arduino(CMD_IMAN_OFF)                     # 7. Apagar imán
-        send_to_arduino("X 1000 X")                       # *. Pausa en Arduino para asegurar que la suelta
-        send_to_arduino((dest[0], dest[1], Z_SEGURO))     # 8. Subir
+
+        send_to_arduino((dest[0], dest[1], Z_SEGURO)) # 5. Moverse sobre el destino
+
+        send_to_arduino((dest[0], dest[1], Z_ABAJO)) # 6. Bajar al tablero
+
+        send_to_arduino(CMD_IMAN_OFF) # 7. Apagar imán
+
+        send_to_arduino("X 1000 X") # *. Pausa en Arduino para asegurar que la suelta
+
+        send_to_arduino((dest[0], dest[1], Z_SEGURO)) # 8. Subir
+
+
 
         # --- RETORNO ---
-        send_to_arduino((origen_x, origen_y, Z_SEGURO))   # 9. Volver a standby
+
+        send_to_arduino((origen_x, origen_y, Z_SEGURO)) # 9. Volver a standby
+
+
 
     elif move[0] == 'move':
+
         _, i, j, x, y = move
+
         start = COORDS[(i, j)]
+
         dest = COORDS[(x, y)]
+
         print(f"[PICK&PLACE] IA mueve ficha de ({i},{j}) a ({x},{y})")
-        
+
+
         # --- COGER FICHA DEL TABLERO ---
-        send_to_arduino((start[0], start[1], Z_SEGURO))   # 1. Posicionarse sobre la ficha a mover
-        send_to_arduino((start[0], start[1], Z_ABAJO))    # 2. Bajar
-        send_to_arduino(CMD_IMAN_ON)                      # 3. Encender imán
-        send_to_arduino("X 1000 X")                       # *. Pausa en Arduino
-        send_to_arduino((start[0], start[1], Z_SEGURO))   # 4. Subir con la ficha
+
+        send_to_arduino((start[0], start[1], Z_SEGURO)) # 1. Posicionarse sobre la ficha a mover
+
+        send_to_arduino((start[0], start[1], Z_ABAJO)) # 2. Bajar
+
+        send_to_arduino(CMD_IMAN_ON) # 3. Encender imán
+
+        send_to_arduino("X 1000 X") # *. Pausa en Arduino
+
+        send_to_arduino((start[0], start[1], Z_SEGURO)) # 4. Subir con la ficha
+
+
 
         # --- DEJAR FICHA EN NUEVA CASILLA ---
-        send_to_arduino((dest[0], dest[1], Z_SEGURO))     # 5. Moverse sobre el destino
-        send_to_arduino((dest[0], dest[1], Z_ABAJO))      # 6. Bajar al tablero
-        send_to_arduino(CMD_IMAN_OFF)                     # 7. Apagar imán
-        send_to_arduino("X 1000 X")                       # *. Pausa en Arduino
-        send_to_arduino((dest[0], dest[1], Z_SEGURO))     # 8. Subir
+
+        send_to_arduino((dest[0], dest[1], Z_SEGURO)) # 5. Moverse sobre el destino
+
+        send_to_arduino((dest[0], dest[1], Z_ABAJO)) # 6. Bajar al tablero
+
+        send_to_arduino(CMD_IMAN_OFF) # 7. Apagar imán
+
+        send_to_arduino("X 1000 X") # *. Pausa en Arduino
+
+        send_to_arduino((dest[0], dest[1], Z_SEGURO)) # 8. Subir
+
+
 
         # --- RETORNO ---
-        send_to_arduino((origen_x, origen_y, Z_SEGURO))   # 9. Volver a standby
+
+        send_to_arduino((origen_x, origen_y, Z_SEGURO)) # 9. Volver a standby
+
+
 
 def play_game():
     current_player = 'O'  # Humano ('O') empieza primero (o cambia a 'X' si quieres que empiece la IA)
@@ -521,7 +574,10 @@ def play_game():
             break
 
         if current_player == 'O': # Turno del Humano ('O')
-            player_turn(current_player)
+            exito = player_turn(current_player)
+            if not exito:
+                print("\n⚠️ El turno fue interrumpido (Cámara o Timeout). Reintentando turno...")
+                continue # SALTA el resto del código y vuelve a iniciar el turno del Humano
         else:                     # Turno de la IA ('X')
             move = best_move(board, current_player)
             if move:
@@ -533,7 +589,7 @@ def play_game():
                 go_to_origin()
                 break
 
-        # Alternar jugador
+        # Alternar jugador SOLO si el turno se completó con éxito
         current_player = 'X' if current_player == 'O' else 'O'
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-CAM = 2
+CAM = 0
 NUM_PUNTOS = 10
 
 def capturar_puntos(nombre_ventana, mensaje):

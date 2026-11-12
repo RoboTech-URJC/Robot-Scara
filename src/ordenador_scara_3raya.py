@@ -12,7 +12,7 @@ import time
 import cv2
 import numpy as np
 
-CAM = 0
+CAM = 2
 
 # ===== CONFIGURACIÓN DE VISIÓN (MODIFICADA PARA ROBUSTEZ) =====
 
@@ -33,6 +33,9 @@ CANNY_HIGH = 150            # Umbral alto Canny
 BLUE_MIN_AREA = 500
 BLUE_MAX_AREA = 10000       # Aumentado un poco por si acaso
 BLUE_MORPH_KERNEL = 5
+
+WINDOW_WIDTH = 1000
+WINDOW_HEIGHT = 600
 
 # ===== CONFIGURACIÓN SERIAL =====
 try:
@@ -340,16 +343,113 @@ def find_pieces_on_board(frame):
 def mouse_callback(event, x, y, flags, param):
     global confirm_clicked
     if event == cv2.EVENT_LBUTTONDOWN:
-        button_x, button_y, button_w, button_h = param
-        if button_x <= x <= button_x + button_w and button_y <= y <= button_y + button_h:
+        button_corner_x = 680
+        button_corner_y = 190
+        button_offset_x = 240
+        button_offset_y = 50
+        if button_corner_x <= x <= button_corner_x + button_offset_x and button_corner_y <= y <= button_corner_y + button_offset_y:
             confirm_clicked = True
+            print("Continuar")
+        button_corner_x = 680
+        button_corner_y = 290
+        button_offset_x = 240
+        button_offset_y = 50
+        if button_corner_x <= x <= button_corner_x + button_offset_x and button_corner_y <= y <= button_corner_y + button_offset_y:
+            print("Resetear")
+
+def draw_interface(window_rectangle, canvas):
+
+    cv2.namedWindow(window_rectangle)
+
+    canvas[:, 600:] = (193, 182, 255)
+
+    # Título
+    cv2.putText(
+        canvas,
+        "MENU DEL JUEGO",
+        (600 + 100, 50),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (255, 255, 255),
+        3
+    )
+
+    # Información del turno
+    cv2.putText(
+        canvas,
+        "Turno: Jugador O",
+        (600 + 120, 110),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.55,
+        (255, 255, 255),
+        2
+    )
+
+    button_corner_x = 680
+    button_corner_y = 190
+    button_offset_x = 240
+    button_offset_y = 50
+
+    cv2.setMouseCallback(window_rectangle, mouse_callback)
+
+    # Botón Continuar
+    cv2.rectangle(
+        canvas,
+        (button_corner_x, button_corner_y),
+        (button_corner_x + button_offset_x, button_corner_y + button_offset_y),
+        (0, 180, 0),
+        -1
+    )
+
+    cv2.putText(
+        canvas,
+        "CONTINUAR",
+        (button_corner_x+65, button_corner_y+25),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.6,
+        (255, 255, 255),
+        2
+    )
+
+    # Botón Reiniciar
+    reset_corner_x = 680
+    reset_corner_y = 290
+    reset_offset_x = 240
+    reset_offset_y = 50
+
+    cv2.rectangle(
+        canvas,
+        (reset_corner_x, reset_corner_y),
+        (reset_corner_x + reset_offset_x, reset_corner_y + reset_offset_y),
+        (0, 100, 200),
+        -1
+    )
+
+    cv2.putText(
+        canvas,
+        "REINICIAR",
+        (reset_corner_x+70, reset_corner_y+25),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.6,
+        (255, 255, 255),
+        2
+    )
+
+    #
 
 # ===== JUEGo - Jugador =====
 # ===== JUEGo - Jugador =====
 def player_turn(player):
     global board, pieces, confirm_clicked
     print(f"\nTurno de {player} (Humano)")
+
     cap = cv2.VideoCapture(CAM)
+    window_interface = "Interfaz"
+    canvas = np.zeros(
+        (WINDOW_HEIGHT, WINDOW_WIDTH, 3),
+        dtype=np.uint8
+    )
+
     if not cap.isOpened():
         print("❌ No se pudo abrir la cámara")
         return False # MODIFICADO: Retorna False en caso de error
@@ -360,17 +460,13 @@ def player_turn(player):
     start_time = time.time()
     timeout = 60
     confirm_clicked = False
-    window_name = "Coloca tu ficha azul"
-    cv2.namedWindow(window_name)
-
-    button_x, button_y, button_w, button_h = 10, 10, 100, 40
-    cv2.setMouseCallback(window_name, mouse_callback, (button_x, button_y, button_w, button_h))
 
     # Limpiar buffer de teclado de OpenCV al iniciar el turno
     while cv2.waitKey(1) != -1:
         pass
         
     turno_exitoso = False  # NUEVO: Bandera para saber si el turno se completó bien
+    draw_interface(window_interface, canvas)
 
     while True:
         ret, frame = cap.read()
@@ -379,7 +475,7 @@ def player_turn(player):
             break # Sale del bucle, turno_exitoso sigue siendo False
         
         board_roi, detected_pieces = find_pieces_on_board(frame)
-        
+
         if board_roi:
             x, y, w, h = board_roi
             cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
@@ -390,9 +486,14 @@ def player_turn(player):
                 cv2.circle(frame, (cx, cy), 15, (255, 255, 0), -1)
 
         # Dibujar botón de confirmar
-        cv2.rectangle(frame, (button_x, button_y), (button_x + button_w, button_y + button_h), (0, 255, 0), -1)
-        cv2.putText(frame, "Confirmar", (button_x + 10, button_y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
-        cv2.imshow(window_name, frame)
+        camera_frame = cv2.resize(
+            frame,
+            (600, 600)
+        )
+
+        canvas[:, :600] = camera_frame
+
+        cv2.imshow(window_interface, canvas)
 
         key = cv2.waitKey(10)
         
@@ -466,6 +567,7 @@ def player_turn(player):
     cap.release()
     cv2.destroyAllWindows()
     return turno_exitoso # MODIFICADO: Retornamos si el turno se hizo bien o no
+
 
 def execute_pick_and_place(move):
 
@@ -566,6 +668,10 @@ def execute_pick_and_place(move):
 def play_game():
     current_player = 'O'  # Humano ('O') empieza primero (o cambia a 'X' si quieres que empiece la IA)
     while True:
+        # Necesita checkeo
+        
+
+        #
         print_board(board)
         winner = check_winner(board)
         if winner:

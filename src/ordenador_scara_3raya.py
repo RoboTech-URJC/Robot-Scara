@@ -435,6 +435,36 @@ def draw_interface(window_rectangle, canvas):
         2
     )
 
+    #Dibujar tablero
+    cv2.line(canvas, (775, 400),
+        (775, 550), (0, 0, 0), 3)
+
+    cv2.line(canvas, (825, 400),
+        (825, 550), (0, 0, 0), 3)
+
+    cv2.line(canvas, (725, 450),
+        (875, 450), (0, 0, 0), 3)
+
+    cv2.line(canvas, (725, 500),
+        (875, 500), (0, 0, 0), 3)
+
+    for row in range(3):
+        for col in range(3):
+
+            cx1 = 750
+            cy1 = 425
+
+            cx = cx1 + (col * 50)
+            cy = cy1 + (row * 50)
+
+            ficha = board[row][col]
+
+            if ficha == "X":
+                cv2.rectangle(canvas, (cx-15, cy-15), (cx+15, cy+15), (0, 0, 255), -1)
+
+            elif ficha == "O":
+                cv2.circle(canvas, (cx, cy), 15, (255, 0, 0), -1)
+
     #
 
 # ===== JUEGo - Jugador =====
@@ -552,6 +582,15 @@ def player_turn(player):
                         board[i_placed][j_placed] = 'O'
                         print(f"✅ Ficha (O) movida de ({i_removed},{j_removed}) a ({i_placed},{j_placed}).")
                         turno_exitoso = True # MARCAMOS ÉXITO
+                        cv2.putText(
+                            canvas,
+                            "Turno: Jugador Scara",
+                            (600 + 100, 110),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.55,
+                            (255, 255, 255),
+                            2
+                        )
                         break # Movimiento válido, salimos del turno
                 else:
                      print("❌ Movimiento inválido. Debes mover exactamente UNA de tus fichas a una casilla vacía.")
@@ -667,11 +706,8 @@ def execute_pick_and_place(move):
 
 def play_game():
     current_player = 'O'  # Humano ('O') empieza primero (o cambia a 'X' si quieres que empiece la IA)
+    window_interface = "Interfaz"
     while True:
-        # Necesita checkeo
-        
-
-        #
         print_board(board)
         winner = check_winner(board)
         if winner:
